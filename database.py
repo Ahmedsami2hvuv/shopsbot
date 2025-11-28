@@ -93,3 +93,16 @@ def add_agent(name: str, secret_code: str) -> bool:
         return False
     finally:
         conn.close()
+
+# دالة لجلب كل المجهزين
+def get_all_agents():
+    """يجلب قائمة بكل المجهزين المخزنين (الاسم والآيدي)."""
+    conn = connect_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    # نجيب الـ ID الداخلي (Primary Key) والاسم
+    cursor.execute("SELECT id, name FROM Agents ORDER BY name") 
+    agents = cursor.fetchall() 
+    conn.close()
+    return agents
+
