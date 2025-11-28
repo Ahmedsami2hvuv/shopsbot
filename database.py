@@ -27,7 +27,7 @@ def setup_db():
     # جدول المجهزين (Agents)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Agents (
-            id INTEGER PRIMARY KEY,
+            id INTEGER INTEGER PRIMARY KEY,
             telegram_id INTEGER UNIQUE,  -- آيدي التليجرام للمجهز (نخليه فارغ لحد ما يسجل دخول)
             name TEXT NOT NULL,
             secret_code TEXT NOT NULL UNIQUE
@@ -64,5 +64,32 @@ def add_shop(name: str, url: str) -> bool:
     finally:
         conn.close()
 
-# ******* هنا نحتاج دوال اضافية بس راح نبدي بالأساسيات حالياً *******
-# (لجلب المحلات، إضافة مجهز، ربط مجهز بمحل...)
+# دالة لجلب كل المحلات
+def get_all_shops():
+    """يجلب قائمة بكل المحلات المخزنة."""
+    conn = connect_db()
+    conn.row_factory = sqlite3.Row 
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, url FROM Shops ORDER BY name")
+    shops = cursor.fetchall() 
+    conn.close()
+    return shops
+
+# دالة لإضافة مجهز جديد
+def add_agent(name: str, secret_code: str) -> bool:
+    """يضيف مجهز جديد ويرجع True اذا نجحت العملية."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # هنا الـ telegram_id نخليه NULL حالياً، لحد ما يسجل دخول بالبوت
+        cursor.execute(
+            "INSERT INTO Agents (name, secret_code) VALUES (?, ?)", 
+            (name, secret_code)
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        # ممكن يصير ايرور إذا الرمز السري موجود مسبقاً
+        return False
+    finally:
+        conn.close()
