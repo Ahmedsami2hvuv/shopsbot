@@ -12,7 +12,8 @@ from telegram.ext import (
     filters
 )
 # استدعاء كل الدوال من database.py
-from database import setup_db, add_shop, get_all_shops, add_agent 
+
+from database import setup_db, add_shop, get_all_shops, add_agent, get_all_agents
 
 # تعريف حالات المحادثة
 (
@@ -221,6 +222,7 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # دوال إدارة المجهزين (Agent Management)
 # ----------------------------------------------------------------------
 
+
 async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تعرض قائمة خيارات إدارة المجهزين."""
     query = update.callback_query
@@ -228,7 +230,7 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     keyboard = [
         [InlineKeyboardButton("إضافة مجهز جديد ➕", callback_data="add_new_agent")], 
-        [InlineKeyboardButton("عرض وتعديل المجهزين 📄 (قريباً)", callback_data="list_agents")],
+        [InlineKeyboardButton("عرض وتعديل المجهزين 📄", callback_data="list_agents")], # شلنا (قريباً)
         [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -239,6 +241,42 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode="Markdown"
     )
     return MANAGE_AGENT # تحويل لحالة إدارة المجهز
+
+
+async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تعرض قائمة بالمجهزين الحاليين كأزرار للتعديل."""
+    query = update.callback_query
+    await query.answer()
+
+    agents = get_all_agents() # جلب المجهزين
+    
+    keyboard = []
+    text = "📄 **قائمة المجهزين الحاليين:**\n\n"
+
+    if agents:
+        # ترتيب الأزرار: سطر واحد لكل مجهز
+        for agent in agents:
+            # الـ callback_data راح يكون "select_agent_" متبوع بـ ID المجهز الداخلي
+            callback_data = f"select_agent_{agent['id']}" 
+            keyboard.append([InlineKeyboardButton(agent['name'], callback_data=callback_data)])
+        
+        text += "إختر المجهز اللي تريد تعدل عليه أو تربطه بمحلات:"
+
+    else:
+        text = "❌ لا يوجد مجهزين مُضافين حالياً."
+        keyboard.append([InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")])
+
+    # زر العودة لإدارة المجهزين
+    keyboard.append([InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        text=text, 
+        reply_markup=reply_markup,
+        parse_mode="Markdown" 
+    )
+    
+    return MANAGE_AGENT
 
 
 async def add_new_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -333,10 +371,10 @@ def main() -> None:
             
             # حالة إدارة المجهزين
             MANAGE_AGENT: [
-                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), # زر العودة للقائمة الرئيسية
-                CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), # زر إضافة مجهز
-                CallbackQueryHandler(admin_menu_handler, pattern="^manage_agents$"), # زر العودة لإدارة المجهزين
-                # هنا نضيف باقي الخيارات لاحقاً...
+                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
+                CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
+                CallbackQueryHandler(admin_menu_handler, pattern="^manage_agents$"), # العودة لإدارة المجهزين
+                CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), # *التعريف الجديد*
             ],
             
             # حالة إضافة بيانات المجهز
