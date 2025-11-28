@@ -127,24 +127,35 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل قائمة للأدمن."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن."""
     query = update.callback_query
     await query.answer()
 
     shops = get_all_shops() # جلب المحلات
     
-    text = "📊 **قائمة المحلات المُضافة:**\n\n"
     keyboard = []
     
     if shops:
-        for shop in shops:
-            # استخدام الـ backticks (`) للـ URL حتى يبين أوضح
-            text += f"*{shop['name']}*\n"
-            text += f"الرابط: `{shop['url']}`\n"
-            text += "----------\n"
-        
-        # زر العودة للقائمة الرئيسية
+        # هنا نرتب الأزرار: كل 2 أو 3 زر بسطر واحد
+        current_row = []
+        for i, shop in enumerate(shops):
+            # إنشاء الزر كـ WebAppInfo (حتى يفتح نافذة المتصفح)
+            button = InlineKeyboardButton(
+                text=shop['name'], 
+                web_app=WebAppInfo(url=shop['url'])
+            )
+            current_row.append(button)
+            
+            # إذا صار عندنا 3 أزرار بالسطر، أو وصلنا لآخر محل:
+            if len(current_row) == 3 or i == len(shops) - 1:
+                keyboard.append(current_row) # نضيف السطر للوحة المفاتيح
+                current_row = [] # نبدي سطر جديد
+
+        # إضافة زر العودة للقائمة الرئيسية بآخر شي
         keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
+        
+        text = "📊 **إختر المحل لرفع الطلبية:**"
+    
     else:
         text = "❌ لا توجد محلات مُضافة حالياً."
         keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
@@ -155,10 +166,11 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text(
         text=text, 
         reply_markup=reply_markup,
-        parse_mode="Markdown" # حتى نستخدم الـ * للـ bold
+        parse_mode="Markdown" 
     )
     
     return ADMIN_MENU
+
 
 # ----------------------------------------------------------------------
 # دوال إضافة محل (Add Shop State)
