@@ -18,19 +18,22 @@ from database import (
     get_all_shops, 
     add_agent, 
     get_all_agents, 
-    get_agent_name_by_id
+    get_agent_name_by_id,
+    # نفترض وجود هذه الدوال الجديدة الآن لمعالجة الربط التفاعلي
+    get_assigned_shop_ids, # لمعرفة المحلات المرتبطة حالياً
+    toggle_agent_shop_assignment # لربط/إلغاء ربط المحل
 ) 
 
 # تعريف حالات المحادثة
 (
-    MAIN_MENU,          # القائمة الرئيسية للمستخدم العادي والـ Admin
-    ADMIN_MENU,         # قائمة خيارات الـ Admin
-    ADD_SHOP_STATE,     # حالة اضافة محل
-    ADD_AGENT_STATE,    # حالة اضافة مجهز
-    AGENT_LOGIN,        # حالة تسجيل دخول المجهز
-    AGENT_MENU,         # قائمة المجهز (عرض المحلات المخصصة إله)
-    MANAGE_AGENT,       # إدارة مجهز موجود (تعديل/إضافة محلات)
-    SELECT_SHOPS        # اختيار المحلات لربطها بالمجهز
+    MAIN_MENU,          
+    ADMIN_MENU,         
+    ADD_SHOP_STATE,     
+    ADD_AGENT_STATE,    
+    AGENT_LOGIN,        
+    AGENT_MENU,         
+    MANAGE_AGENT,       
+    SELECT_SHOPS        
 ) = range(8)
 
 # تعريف الـ Admin IDs (الناس اللي عدها صلاحية الإدارة)
@@ -61,7 +64,6 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if update.callback_query:
         await update.callback_query.answer()
-        # نستخدم edit_message_text لحل مشكلة 'عرض المحلات' عند العودة
         await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
     else:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
@@ -80,8 +82,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if user_id in ADMIN_IDS:
         return await show_admin_menu(update, context) 
     else:
+        # هنا نعرض الزر الذي يقود لحالة AGENT_LOGIN
         keyboard = [
-            [InlineKeyboardButton("دخول المجهز 🔑", callback_data="agent_login")]
+            [InlineKeyboardButton("دخول المجهز 🔑", callback_data="agent_login_prompt")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -103,7 +106,6 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if data == "add_shop":
         await query.answer()
-        # إضافة زر الإلغاء/العودة (لحل المشكلة رقم 2)
         keyboard = [
             [InlineKeyboardButton("🔙 إلغاء والعودة", callback_data="admin_menu")]
         ]
@@ -130,9 +132,16 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن."""
-    query = update.callback_query
-    await query.answer()
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (تم حل مشكلة عدم عمل هذه الميزة)."""
+    
+    # نحدد مصدر التحديث (زر أو أمر)
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        message_to_edit = query.edit_message_text
+    else:
+        # إذا كان الاستدعاء من مكان آخر غير زر، نعامله كرسالة جديدة (نادر الحدوث هنا)
+        return ADMIN_MENU
 
     shops = get_all_shops()
     
@@ -161,7 +170,7 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
+    await message_to_edit(
         text=text, 
         reply_markup=reply_markup,
         parse_mode="Markdown" 
@@ -181,7 +190,6 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         parts = text.split('\n', 1) 
         
         if len(parts) != 2:
-            # زر العودة موجود في الكيبورد الآن (من admin_menu_handler)
             await update.message.reply_text(
                 "❌ صيغة الإدخال خطأ. لازم تكون:\n"
                 "إسم المحل\n"
@@ -257,7 +265,6 @@ async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text = "❌ لا يوجد مجهزين مُضافين حالياً."
         keyboard.append([InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")])
 
-    # زر العودة إلى إدارة المجهزين (لحل المشكلة رقم 4)
     keyboard.append([InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -275,13 +282,18 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     query = update.callback_query
     await query.answer()
 
-    # التأكد من الحصول على ID سواء من callback_data أو من context
     if query.data and query.data.startswith("select_agent_"):
         agent_id = int(query.data.split('_')[-1])
         context.user_data['selected_agent_id'] = agent_id 
-    else:
-        # هذه الحالة لا يجب أن تحدث إذا تم استدعاء الدالة بشكل صحيح
-        agent_id = context.user_data.get('selected_agent_id')
+        # عند الدخول لقائمة التعديل، نقوم بتحميل المحلات المرتبطة من قاعدة البيانات
+        # ونخزنها مؤقتاً لعملية التعديل
+        try:
+            assigned_ids = get_assigned_shop_ids(agent_id)
+            context.user_data['temp_assigned_shops'] = set(assigned_ids)
+        except Exception:
+            context.user_data['temp_assigned_shops'] = set() # في حال لم تكن الدالة متوفرة بعد
+
+    agent_id = context.user_data.get('selected_agent_id')
 
     if not agent_id:
         await query.edit_message_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
@@ -292,11 +304,8 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         agent_name = f"المجهز رقم {agent_id}"
 
     keyboard = [
-        # تم ربطها بالدالة الجديدة list_shops_to_assign
         [InlineKeyboardButton(f"إضافة محلات إلى {agent_name} 🏪", callback_data=f"assign_shops_{agent_id}")],
-        # المشكلة رقم 6: تركها "قريباً"
         [InlineKeyboardButton(f"تعديل تفاصيل {agent_name} ✏️ (قريباً)", callback_data=f"edit_details_soon")],
-        # زر العودة لقائمة المجهزين (list_agents)
         [InlineKeyboardButton("🔙 العودة لقائمة المجهزين", callback_data="list_agents")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -311,18 +320,19 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """تعرض قائمة المحلات لربطها بالمجهز (هيكل الميزة رقم 5)."""
+    """تعرض قائمة المحلات لربطها بالمجهز وتظهر علامة ✅ (حل المشكلة الجديدة)."""
     query = update.callback_query
     await query.answer()
 
-    # نجلب ID المجهز من context
     agent_id = context.user_data.get('selected_agent_id')
     if not agent_id:
-        await query.edit_message_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
         return await manage_agents_menu(update, context)
         
     shops = get_all_shops()
     agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
+    
+    # جلب المحلات المحددة حالياً من الـ context
+    selected_shops = context.user_data.get('temp_assigned_shops', set())
 
     keyboard = []
     
@@ -336,31 +346,88 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return MANAGE_AGENT
 
-    # هذا هو الجزء الذي يحتاج منطق Checkbox متقدم، لذا نضع هيكلاً مؤقتاً
     for shop in shops:
-        # حاليا سنضيف كل محل كزر عادي
-        keyboard.append([InlineKeyboardButton(f"⬜ {shop['name']}", callback_data=f"toggle_shop_{shop['id']}")])
+        is_selected = shop['id'] in selected_shops
+        emoji = "✅ " if is_selected else "⬜ "
+        callback_data = f"toggle_shop_{shop['id']}"
+        keyboard.append([InlineKeyboardButton(f"{emoji}{shop['name']}", callback_data=callback_data)])
 
-    keyboard.append([InlineKeyboardButton("✅ تأكيد ربط المحلات", callback_data="confirm_shop_assignment")])
-    # زر العودة لخيارات المجهز
+    # أزرار الإجراءات
+    keyboard.append([InlineKeyboardButton("✅ تأكيد وحفظ الربط", callback_data="confirm_shop_assignment")])
     keyboard.append([InlineKeyboardButton("🔙 إلغاء والعودة لخيارات المجهز", callback_data=f"select_agent_{agent_id}")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
         f"🏪 **ربط محلات بالمجهز {agent_name}:**\n\n"
-        "إختر المحلات التي سيتم إتاحتها لهذا المجهز:",
+        "إختر المحلات التي سيتم إتاحتها لهذا المجهز. اضغط على 'تأكيد وحفظ الربط' لتطبيق التغييرات.",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
 
-    return SELECT_SHOPS # تحويل إلى حالة اختيار المحلات
+    return SELECT_SHOPS
+
+
+async def toggle_shop_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يعكس حالة اختيار المحل مؤقتاً ويعيد عرض القائمة (لحل المشكلة الجديدة)."""
+    query = update.callback_query
+    await query.answer()
+    
+    # جلب ID المحل من الـ callback data
+    shop_id = int(query.data.split('_')[-1])
+    
+    # جلب قائمة المحلات المختارة مؤقتاً
+    selected_shops = context.user_data.get('temp_assigned_shops', set())
+    
+    # عكس حالة الاختيار
+    if shop_id in selected_shops:
+        selected_shops.remove(shop_id)
+    else:
+        selected_shops.add(shop_id)
+        
+    # حفظ التغييرات في الـ context
+    context.user_data['temp_assigned_shops'] = selected_shops
+    
+    # إعادة عرض القائمة المحدثة
+    return await list_shops_to_assign(update, context)
+
 
 async def handle_shop_assignment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """دالة لمعالجة عملية ربط المحلات (Placeholder)."""
-    # هنا سيتم لاحقاً تنفيذ منطق حفظ المحلات المحددة للمجهز في قاعدة البيانات
+    """حفظ المحلات المختارة في قاعدة البيانات."""
     query = update.callback_query
-    await query.answer("ميزة ربط المحلات ما زالت قيد التطوير.")
+    await query.answer()
+    
+    agent_id = context.user_data.get('selected_agent_id')
+    selected_shops = context.user_data.get('temp_assigned_shops', set())
+    
+    if not agent_id:
+        await query.edit_message_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
+        return await manage_agents_menu(update, context)
+
+    try:
+        # هنا سننفذ عملية الحفظ في قاعدة البيانات
+        # نحتاج دالة في database.py تقوم بربط/إلغاء ربط كل المحلات دفعة واحدة
+        # مؤقتاً: سننفذ منطق تبسيط، يفترض أنك ستنفذ الدالة toggle_agent_shop_assignment
+        
+        # 1. جلب المحلات المرتبطة حالياً من القاعدة
+        current_assigned_ids = set(get_assigned_shop_ids(agent_id))
+        
+        # 2. تحديد المحلات التي يجب إضافتها وإزالتها
+        to_add = selected_shops - current_assigned_ids
+        to_remove = current_assigned_ids - selected_shops
+        
+        # 3. تطبيق التغييرات
+        for shop_id in to_add:
+            toggle_agent_shop_assignment(agent_id, shop_id, True)
+        for shop_id in to_remove:
+            toggle_agent_shop_assignment(agent_id, shop_id, False)
+
+        await query.edit_message_text("✅ تم حفظ ربط المحلات بنجاح!")
+        
+    except Exception as e:
+        logger.error(f"Error saving shop assignment for agent {agent_id}: {e}")
+        await query.edit_message_text("❌ حدث خطأ أثناء محاولة حفظ ربط المحلات.")
+
     # نرجع لقائمة خيارات المجهز بعد الانتهاء
     return await select_agent_menu(update, context)
 
@@ -406,7 +473,6 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         agent_code = parts[1].strip()
 
         if add_agent(agent_name, agent_code):
-            # تم تغيير العودة للقائمة الرئيسية إلى العودة لإدارة المجهزين (manage_agents)
             keyboard = [[InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
@@ -424,9 +490,42 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error adding agent: {e}")
         await update.message.reply_text("❌ حدث خطأ غير متوقع أثناء إضافة المجهز.")
 
-    # نرجع لقائمة إدارة المجهزين
     return MANAGE_AGENT
 
+# ----------------------------------------------------------------------
+# دوال المجهز (Agent)
+# ----------------------------------------------------------------------
+
+async def agent_login_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يطلب من المجهز إدخال رمز الدخول السري (حل مشكلة عدم عمل الزر)."""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [InlineKeyboardButton("🔙 إلغاء والعودة", callback_data="start")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "🔑 **تسجيل دخول المجهز:**\n"
+        "الرجاء إرسال رمز الدخول السري الخاص بك:",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+    return AGENT_LOGIN
+
+async def agent_login_receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يستقبل رمز الدخول السري ويتحقق منه (هيكل)."""
+    # هنا يجب إضافة منطق التحقق من الرمز في database.py
+    # if check_agent_code(update.message.text):
+    #     return AGENT_MENU
+    # else:
+    #     await update.message.reply_text("❌ رمز الدخول غير صحيح.")
+    #     return AGENT_LOGIN
+
+    await update.message.reply_text("مرحباً بك كمجهز! (منطق التحقق قيد التنفيذ)")
+    return AGENT_MENU # مؤقتاً نرجع لقائمة المجهز
 
 # ----------------------------------------------------------------------
 # الدالة الرئيسية للتشغيل
@@ -453,43 +552,46 @@ def main() -> None:
             ],
             
             ADD_SHOP_STATE: [
-                # New: Add handler for the Cancel button
                 CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_shop_data),
             ],
             
             MANAGE_AGENT: [
                 CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
+                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), # للعودة من القوائم الفرعية
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
                 CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
                 
-                # New: Fix for issues 3 & 4 (Back to Agent Management)
-                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"),
-                
-                # New: Handler for assigning shops (Issue 5)
-                CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
-                
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+                CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
             ],
             
             ADD_AGENT_STATE: [
-                # New: Add handler for the Cancel button
                 CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_agent_data)
             ],
 
             SELECT_SHOPS: [
-                # New: Handlers for shop assignment state
                 CallbackQueryHandler(handle_shop_assignment, pattern="^confirm_shop_assignment$"),
-                # Handler to go back to agent options
+                # زر اختيار/إلغاء اختيار المحل
+                CallbackQueryHandler(toggle_shop_selection, pattern="^toggle_shop_\d+$"), 
+                # العودة لخيارات المجهز
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
-                # Handler for toggling shops (placeholder for future implementation)
-                CallbackQueryHandler(list_shops_to_assign, pattern="^toggle_shop_\d+$"),
             ],
             
             AGENT_LOGIN: [
-                # مؤقت
+                # New: Handler for the initial login prompt button
+                CallbackQueryHandler(agent_login_prompt, pattern="^agent_login_prompt$"),
+                # New: Handler for receiving the code
+                MessageHandler(filters.TEXT & ~filters.COMMAND, agent_login_receive_code),
+                # New: Handler for Cancel button in login prompt
+                CommandHandler("start", start_command),
+                CallbackQueryHandler(start_command, pattern="^start$"),
             ],
+
+            AGENT_MENU: [
+                # قائمة المجهز
+            ]
         },
         
         fallbacks=[CommandHandler("start", start_command)],
