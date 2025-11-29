@@ -243,3 +243,32 @@ def delete_agent(agent_id: int) -> bool:
         return True
     except Exception:
         return False
+
+# ------------------------------------------------------------------------------------------------
+# الدالة الجديدة: جلب المحلات المخصصة بناءً على البحث
+# ------------------------------------------------------------------------------------------------
+def get_agent_shops_by_search(agent_id: int, search_term: str):
+    """
+    تجلب المحلات المخصصة لمجهز معين والتي يتطابق اسمها جزئياً مع نص البحث.
+    """
+    try:
+        # استخدام LIKE للحصول على نتائج جزئية
+        # %s% يعني: البحث عن نص البحث في أي مكان في اسم المحل
+        query = """
+            SELECT T1.id, T1.name, T1.url 
+            FROM Shops AS T1
+            JOIN AgentShops AS T2 ON T1.id = T2.shop_id
+            WHERE T2.agent_id = %s AND T1.name ILIKE %s
+            ORDER BY T1.name
+        """
+        # إضافة علامات النسبة المئوية حول مصطلح البحث
+        search_pattern = f"%{search_term}%" 
+        
+        results = execute_query(query, (agent_id, search_pattern), fetch_all=True)
+        
+        return results if results else []
+    except Exception as e:
+        # يمكنك إضافة طباعة الخطأ للتتبع
+        # logger.error(f"DB Error in get_agent_shops_by_search: {e}")
+        return []
+        
