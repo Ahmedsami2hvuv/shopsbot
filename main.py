@@ -147,11 +147,18 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع معالجة الأخطاء)."""
     
     query = update.callback_query
-    await query.answer() 
+    
+    # 1. الرد الفوري على الضغطة لمنع الصمت، مع رسالة قصيرة
+    try:
+        # إذا كان الزر صامتاً، فهذا الرد قد يكون فشل (لكنه ضروري للمحاولة)
+        await query.answer("⏳ جاري جلب المحلات...") 
+    except Exception:
+        pass # نتجاهل خطأ الرد ونكمل
 
     shops = []
+    
+    # 2. محاولة جلب البيانات مع معالجة أخطاء قاعدة البيانات
     try:
-        # محاولة جلب البيانات. إذا فشلت، سيتم الانتقال لـ except
         shops = get_all_shops() 
     except Exception as e:
         logger.error(f"Error fetching shops for admin: {e}")
@@ -160,11 +167,19 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
         text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات. تأكد من أن PostgreSQL يعمل."
         keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=text, reply_markup=reply_markup)
-        return ADMIN_MENU # العودة لقائمة الإدارة
+        
+        # محاولة التعديل أو إرسال رسالة جديدة (الحل الجذري للصمت)
+        try:
+            await query.edit_message_text(text=text, reply_markup=reply_markup)
+        except Exception as edit_e:
+            logger.error(f"Failed to edit message with DB error, sending new one: {edit_e}")
+            await update.effective_message.reply_text(text=text, reply_markup=reply_markup)
+            
+        return ADMIN_MENU 
 
     keyboard = []
     
+    # 3. بناء القائمة النهائية في حال نجاح الجلب
     if shops:
         text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**"
         current_row = []
@@ -189,12 +204,22 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # يجب أن يتم هنا تعديل الرسالة التي ضغط منها الزر (query)
-    await query.edit_message_text(
-        text=text, 
-        reply_markup=reply_markup,
-        parse_mode="Markdown" 
-    )
+    # 4. محاولة تعديل الرسالة، وفي حال الفشل إرسال رسالة جديدة (هذا هو الحل الأقوى)
+    try:
+        await query.edit_message_text(
+            text=text, 
+            reply_markup=reply_markup,
+            parse_mode="Markdown" 
+        )
+    except Exception as e:
+         # 5. في حال فشل التعديل الصامت، إرسال رسالة جديدة (حل جذري)
+         logger.error(f"Failed to edit message, sending new one: {e}")
+         # نستخدم effective_message للرد على الرسالة الأصلية
+         await update.effective_message.reply_text(
+            text="⚠️ فشل تحديث الرسالة. إليك قائمة المحلات:\n" + text, 
+            reply_markup=reply_markup,
+            parse_mode="Markdown" 
+         )
     
     return ADMIN_MENU
 
@@ -733,7 +758,7 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
-                # 👇 التعديل الأهم: فصل معالج عرض المحلات ليعمل بشكل سليم
+                # 👇 هذا الجزء صحيح ومفصول لضمان الأولوية
                 CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
             ],
