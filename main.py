@@ -391,7 +391,7 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
-                # عدلنا الـ pattern حتى يشمل كل الـ callbacks الجديدة
+                # هذا الجزء مسؤول عن معالجة أزرار القائمة الرئيسية للمدير
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|show_shops_admin|admin_menu)$"),
             ],
             
@@ -399,12 +399,16 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_shop_data)
             ],
             
-            # حالة إدارة المجهزين
+            # حالة إدارة المجهزين:
             MANAGE_AGENT: [
+                # 1. العودة للقائمة الرئيسية
                 CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
+                # 2. إضافة مجهز جديد
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
-                CallbackQueryHandler(admin_menu_handler, pattern="^manage_agents$"), # العودة لإدارة المجهزين
-                CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), # *التعريف الجديد*
+                # 3. العودة من قائمة اختيار المجهز إلى قائمة المجهزين
+                CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
+                # 4. معالجة اختيار مجهز محدد (اللي جانت تسبب المشكلة)
+                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
             ],
             
             # حالة إضافة بيانات المجهز
@@ -425,6 +429,7 @@ def main() -> None:
 
     logger.info("🤖 البوت جاي يشتغل (Long Polling)...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 
 if __name__ == "__main__":
