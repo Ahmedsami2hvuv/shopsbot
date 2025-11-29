@@ -1,5 +1,4 @@
-
-
+# database.py
 import os
 import psycopg2
 from psycopg2 import sql
@@ -43,10 +42,11 @@ def setup_db():
         """)
         
         # جدول ربط المحلات والمجهزين (AgentShops)
+        # يستخدم لربط المجهز بالمحلات التي يمكنه التعامل معها
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS AgentShops (
-                agent_id INTEGER REFERENCES Agents(id),
-                shop_id INTEGER REFERENCES Shops(id),
+                agent_id INTEGER REFERENCES Agents(id) ON DELETE CASCADE,
+                shop_id INTEGER REFERENCES Shops(id) ON DELETE CASCADE,
                 PRIMARY KEY (agent_id, shop_id)
             )
         """)
@@ -80,10 +80,12 @@ def execute_query(query, params=None, fetch_all=False, fetch_one=False):
             conn.commit()
     except psycopg2.IntegrityError:
         if conn: conn.rollback()
-        raise
+        raise # رفع الخطأ للـ main.py لمعالجته
     except Exception as e:
         if conn: conn.rollback()
-        raise
+        # هنا قد تحتاج تسجيل الخطأ بدلاً من طباعته
+        print(f"Database error: {e}") 
+        raise # رفع الخطأ لمعالجته
     finally:
         if conn: conn.close()
     return result
@@ -131,4 +133,62 @@ def get_agent_name_by_id(agent_id: int) -> str | None:
         return agent['name'] if agent else None
     except Exception as e:
         print(f"Error fetching agent name: {e}")
+        return None
+
+# ------------------------------------------------------------------------------------------------
+# الدوال الجديدة المطلوبة لربط المحلات والمجهزين (لحالة MANAGE_AGENT و AGENT_LOGIN)
+# ------------------------------------------------------------------------------------------------
+
+def get_assigned_shop_ids(agent_id: int) -> list[int]:
+    """
+    تسترجع قائمة بـ ID المحلات المرتبطة حالياً بالمجهز.
+    """
+    try:
+        results = execute_query(
+            "SELECT shop_id FROM AgentShops WHERE agent_id = %s", 
+            (agent_id,), 
+            fetch_all=True
+        )
+        # تحويل قائمة القواميس إلى قائمة من الـ ID (int)
+        return [row['shop_id'] for row in results] if results else []
+    except Exception:
+        return [] 
+
+def toggle_agent_shop_assignment(agent_id: int, shop_id: int, is_assigned: bool) -> bool:
+    """
+    تقوم بربط أو إلغاء ربط محل معين بمجهز معين في قاعدة البيانات.
+    """
+    try:
+        if is_assigned:
+            # الربط: INSERT
+            execute_query(
+                "INSERT INTO AgentShops (agent_id, shop_id) VALUES (%s, %s)",
+                (agent_id, shop_id)
+            )
+        else:
+            # إلغاء الربط: DELETE
+            execute_query(
+                "DELETE FROM AgentShops WHERE agent_id = %s AND shop_id = %s",
+                (agent_id, shop_id)
+            )
+        return True
+    except psycopg2.IntegrityError:
+        # إذا حاولنا الإضافة وموجود بالفعل (لا مشكلة)
+        return True
+    except Exception:
+        return False
+
+# دالة التحقق من رمز المجهز (لجزء تسجيل الدخول)
+def check_agent_code(agent_code: str):
+    """
+    تتحقق من وجود رمز الدخول السري للمجهز في قاعدة البيانات وترجع معلوماته.
+    """
+    try:
+        agent = execute_query(
+            "SELECT id, telegram_id, name FROM Agents WHERE secret_code = %s", 
+            (agent_code,), 
+            fetch_one=True
+        )
+        return agent # ترجع قاموس أو None
+    except Exception:
         return None
