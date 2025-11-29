@@ -243,41 +243,6 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return MANAGE_AGENT # تحويل لحالة إدارة المجهز
 
 
-async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """تعرض قائمة بالمجهزين الحاليين كأزرار للتعديل."""
-    query = update.callback_query
-    await query.answer()
-
-    agents = get_all_agents() # جلب المجهزين
-    
-    keyboard = []
-    text = "📄 **قائمة المجهزين الحاليين:**\n\n"
-
-    if agents:
-        # ترتيب الأزرار: سطر واحد لكل مجهز
-        for agent in agents:
-            # الـ callback_data راح يكون "select_agent_" متبوع بـ ID المجهز الداخلي
-            callback_data = f"select_agent_{agent['id']}" 
-            keyboard.append([InlineKeyboardButton(agent['name'], callback_data=callback_data)])
-        
-        text += "إختر المجهز اللي تريد تعدل عليه أو تربطه بمحلات:"
-
-    else:
-        text = "❌ لا يوجد مجهزين مُضافين حالياً."
-        keyboard.append([InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")])
-
-    # زر العودة لإدارة المجهزين
-    keyboard.append([InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(
-        text=text, 
-        reply_markup=reply_markup,
-        parse_mode="Markdown" 
-    )
-    
-    return MANAGE_AGENT
-
 async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يعرض خيارات التعديل لمجهز محدد."""
     query = update.callback_query
@@ -289,9 +254,10 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # نحفظ الـ ID في الـ context حتى نستخدمه بالخطوات الجاية
     context.user_data['selected_agent_id'] = agent_id 
     
-    # ***** هنا لازم تجيب اسم المجهز من القاعدة باستخدام الـ ID *****
-    # (حالياً راح نعتمد على الـ ID فقط لغرض التجربة، وراح نكتب دالة جلب الاسم بـ database.py قريباً)
-    agent_name = f"المجهز رقم {agent_id}" 
+    # نجلب اسم المجهز من القاعدة (نفترض أنك ضفت الدالة لـ database.py)
+    agent_name = get_agent_name_by_id(agent_id) 
+    if not agent_name:
+        agent_name = f"المجهز رقم {agent_id}"
 
     keyboard = [
         [InlineKeyboardButton(f"إضافة محلات إلى {agent_name} 🏪", callback_data=f"assign_shops_{agent_id}")],
@@ -391,7 +357,7 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
-                # هذا الجزء مسؤول عن معالجة أزرار القائمة الرئيسية للمدير
+                # هذا الجزء مسؤول عن معالجة أزرار القائمة الرئيسية 
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|show_shops_admin|admin_menu)$"),
             ],
             
