@@ -1,108 +1,129 @@
-# database.py
-import sqlite3
 
-# اسم قاعدة البيانات
-DB_NAME = 'delivery_system.db'
+
+import os
+import psycopg2
+from psycopg2 import sql
+
+# الحصول على URL الاتصال بقاعدة البيانات من متغيرات البيئة (PostgreSQL)
+# هذا المتغير يتم انشاؤه تلقائيا عند اضافة خدمة PostgreSQL بـ Railway
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 def connect_db():
-    """يربط بقاعدة البيانات ويرجع كائن الاتصال والمؤشر."""
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row # حتى نرجع البيانات كـقاموس (Dict)
+    """يربط بقاعدة بيانات PostgreSQL."""
+    if not DATABASE_URL:
+        # إذا لم يتم تعريف الـ URL، ارفع خطأ لأن البوت ما راح يشتغل
+        raise Exception("DATABASE_URL environment variable is not set. Please add a PostgreSQL service in Railway.")
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
 def setup_db():
     """إنشاء الجداول عند تشغيل البوت لأول مرة."""
-    conn = connect_db()
-    cursor = conn.cursor()
-    
-    # جدول المحلات (Shops)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Shops (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL
-        )
-    """)
-    
-    # جدول المجهزين (Agents)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Agents (
-            id INTEGER INTEGER PRIMARY KEY,
-            telegram_id INTEGER UNIQUE,  -- آيدي التليجرام للمجهز (نخليه فارغ لحد ما يسجل دخول)
-            name TEXT NOT NULL,
-            secret_code TEXT NOT NULL UNIQUE
-        )
-    """)
-    
-    # جدول ربط المحلات والمجهزين (AgentShops)
-    # هذا الجدول يحدد يا مجهز يگدر يرفع طلبية لـ يا محل
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS AgentShops (
-            agent_id INTEGER,
-            shop_id INTEGER,
-            FOREIGN KEY (agent_id) REFERENCES Agents(id),
-            FOREIGN KEY (shop_id) REFERENCES Shops(id),
-            PRIMARY KEY (agent_id, shop_id)
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
+    conn = None
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        
+        # جدول المحلات (Shops)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Shops (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL
+            )
+        """)
+        
+        # جدول المجهزين (Agents)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Agents (
+                id SERIAL PRIMARY KEY,
+                telegram_id BIGINT UNIQUE,  -- آيدي التليجرام
+                name TEXT NOT NULL,
+                secret_code TEXT NOT NULL UNIQUE
+            )
+        """)
+        
+        # جدول ربط المحلات والمجهزين (AgentShops)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS AgentShops (
+                agent_id INTEGER REFERENCES Agents(id),
+                shop_id INTEGER REFERENCES Shops(id),
+                PRIMARY KEY (agent_id, shop_id)
+            )
+        """)
+        
+        conn.commit()
+    except Exception as e:
+        print(f"Error during database setup: {e}")
+    finally:
+        if conn:
+            conn.close()
 
-# دالة لإضافة محل جديد
+# دالة مساعدة لإجراء الاستعلامات (PostgreSQL يحتاج طريقة مختلفة لجلب الصفوف كـ Dict)
+def execute_query(query, params=None, fetch_all=False, fetch_one=False):
+    conn = None
+    result = None
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        if fetch_all:
+            # جلب أسماء الأعمدة يدوياً
+            col_names = [desc[0] for desc in cursor.description]
+            # جلب كل الصفوف وتحويلها إلى قائمة من القواميس
+            result = [dict(zip(col_names, row)) for row in cursor.fetchall()]
+        elif fetch_one:
+            col_names = [desc[0] for desc in cursor.description]
+            row = cursor.fetchone()
+            if row:
+                result = dict(zip(col_names, row))
+        else:
+            conn.commit()
+    except psycopg2.IntegrityError:
+        if conn: conn.rollback()
+        raise
+    except Exception as e:
+        if conn: conn.rollback()
+        raise
+    finally:
+        if conn: conn.close()
+    return result
+
+
+# تعديل دوال إضافة محل وجلب محلات
 def add_shop(name: str, url: str) -> bool:
     """يضيف محل جديد ويرجع True اذا نجحت العملية."""
-    conn = connect_db()
-    cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO Shops (name, url) VALUES (?, ?)", (name, url))
-        conn.commit()
+        execute_query("INSERT INTO Shops (name, url) VALUES (%s, %s)", (name, url))
         return True
-    except sqlite3.IntegrityError:
-        # ممكن يصير ايرور إذا اسم المحل موجود مسبقاً
+    except psycopg2.IntegrityError:
         return False
-    finally:
-        conn.close()
+    except Exception:
+        return False
 
-# دالة لجلب كل المحلات
 def get_all_shops():
     """يجلب قائمة بكل المحلات المخزنة."""
-    conn = connect_db()
-    conn.row_factory = sqlite3.Row 
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, url FROM Shops ORDER BY name")
-    shops = cursor.fetchall() 
-    conn.close()
-    return shops
+    return execute_query("SELECT id, name, url FROM Shops ORDER BY name", fetch_all=True)
 
-# دالة لإضافة مجهز جديد
+# تعديل دالة إضافة مجهز
 def add_agent(name: str, secret_code: str) -> bool:
     """يضيف مجهز جديد ويرجع True اذا نجحت العملية."""
-    conn = connect_db()
-    cursor = conn.cursor()
     try:
-        # هنا الـ telegram_id نخليه NULL حالياً، لحد ما يسجل دخول بالبوت
-        cursor.execute(
-            "INSERT INTO Agents (name, secret_code) VALUES (?, ?)", 
+        execute_query(
+            "INSERT INTO Agents (name, secret_code) VALUES (%s, %s)", 
             (name, secret_code)
         )
-        conn.commit()
         return True
-    except sqlite3.IntegrityError:
-        # ممكن يصير ايرور إذا الرمز السري موجود مسبقاً
+    except psycopg2.IntegrityError:
         return False
-    finally:
-        conn.close()
+    except Exception:
+        return False
 
-# دالة لجلب كل المجهزين
+# تعديل دالة جلب المجهزين
 def get_all_agents():
     """يجلب قائمة بكل المجهزين المخزنين (الاسم والآيدي)."""
-    conn = connect_db()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    # نجيب الـ ID الداخلي (Primary Key) والاسم
-    cursor.execute("SELECT id, name FROM Agents ORDER BY name") 
-    agents = cursor.fetchall() 
-    conn.close()
-    return agents
+    return execute_query("SELECT id, name FROM Agents ORDER BY name", fetch_all=True)
 
+def get_agent_name_by_id(agent_id: int) -> str | None:
+    """يجلب اسم المجهز بواسطة الـ ID الداخلي."""
+    agent = execute_query("SELECT name FROM Agents WHERE id = %s", (agent_id,), fetch_one=True)
+    return agent['name'] if agent else None
