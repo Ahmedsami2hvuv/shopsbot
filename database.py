@@ -122,8 +122,13 @@ def add_agent(name: str, secret_code: str) -> bool:
 def get_all_agents():
     """يجلب قائمة بكل المجهزين المخزنين (الاسم والآيدي)."""
     return execute_query("SELECT id, name FROM Agents ORDER BY name", fetch_all=True)
+    
 
 def get_agent_name_by_id(agent_id: int) -> str | None:
     """يجلب اسم المجهز بواسطة الـ ID الداخلي."""
-    agent = execute_query("SELECT name FROM Agents WHERE id = %s", (agent_id,), fetch_one=True)
-    return agent['name'] if agent else None
+    try:
+        agent = execute_query("SELECT name FROM Agents WHERE id = %s", (agent_id,), fetch_one=True)
+        return agent['name'] if agent else None
+    except Exception as e:
+        print(f"Error fetching agent name: {e}")
+        return None
