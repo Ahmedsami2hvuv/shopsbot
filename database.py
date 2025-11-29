@@ -1,11 +1,17 @@
 # database.py
 import os
+import logging
 import psycopg2
 from psycopg2 import sql
 import psycopg2.extras # 👈🏼 تم إضافة الاستدعاء هذا لكي يعمل RealDictCursor
 
+# تفعيل نظام الـ Logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 # الحصول على URL الاتصال بقاعدة البيانات من متغيرات البيئة (PostgreSQL)
-# هذا المتغير يتم انشاؤه تلقائيا عند اضافة خدمة PostgreSQL بـ Railway
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 def connect_db():
@@ -17,7 +23,7 @@ def connect_db():
     return conn
 
 # ------------------------------------------------------------------------------------------------
-# الدالة الأساسية لتنفيذ الاستعلامات (execute_query) 👈🏼 تم الإضافة
+# الدالة الأساسية لتنفيذ الاستعلامات (execute_query)
 # ------------------------------------------------------------------------------------------------
 def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
     """
@@ -36,21 +42,17 @@ def execute_query(query: str, params: tuple = None, fetch_one: bool = False, fet
             return cursor.fetchone()
         elif fetch_all:
             return cursor.fetchall()
-        
-        return True # للعمليات التي لا تتطلب إرجاع (INSERT/UPDATE/DELETE)
-    
+        else:
+            return True # تم التنفيذ بنجاح
+            
     except Exception as e:
-        print(f"Database Query Error: {e} | Query: {query}")
-        # في حالة الخطأ، نرجع None للـ SELECT و False لغيرها
-        return None if (fetch_one or fetch_all) else False
-    
+        # logger.error(f"DB Error executing query: {e}")
+        return False
+        
     finally:
         if conn:
             conn.close()
 
-# ------------------------------------------------------------------------------------------------
-# دوال الإعداد والإنشاء
-# ------------------------------------------------------------------------------------------------
 def setup_db():
     """إنشاء الجداول عند تشغيل البوت لأول مرة."""
     conn = None
@@ -71,7 +73,7 @@ def setup_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Agents (
                 id SERIAL PRIMARY KEY,
-                telegram_id BIGINT UNIQUE,  -- آيدي التليجرام
+                telegram_id BIGINT UNIQUE,
                 name TEXT NOT NULL,
                 secret_code TEXT NOT NULL UNIQUE
             )
@@ -85,90 +87,68 @@ def setup_db():
                 PRIMARY KEY (agent_id, shop_id)
             )
         """)
-        
         conn.commit()
+        
     except Exception as e:
-        print(f"Database setup error: {e}")
+        logger.error(f"Error setting up database: {e}")
     finally:
         if conn:
             conn.close()
 
 # ------------------------------------------------------------------------------------------------
-# دوال إضافة العناصر
+# دوال المحلات (Shops)
 # ------------------------------------------------------------------------------------------------
-def add_shop(name: str, url: str) -> bool:
-    """إضافة محل جديد إلى جدول Shops."""
+
+def add_shop(name: str, url: str):
+    """إضافة محل جديد إلى قاعدة البيانات."""
     query = "INSERT INTO Shops (name, url) VALUES (%s, %s)"
     return execute_query(query, (name, url))
 
-def add_agent(telegram_id: int, name: str, secret_code: str) -> bool:
-    """إضافة مجهز جديد إلى جدول Agents."""
-    query = "INSERT INTO Agents (telegram_id, name, secret_code) VALUES (%s, %s, %s)"
-    # الـ telegram_id يمكن أن يكون None إذا لم يسجل الدخول بعد
-    return execute_query(query, (telegram_id, name, secret_code))
-
-# ------------------------------------------------------------------------------------------------
-# دوال استرجاع البيانات
-# ------------------------------------------------------------------------------------------------
-def get_all_shops() -> list:
-    """استرجاع قائمة بجميع المحلات."""
+def get_all_shops():
+    """جلب جميع المحلات."""
     query = "SELECT id, name, url FROM Shops ORDER BY name"
     return execute_query(query, fetch_all=True)
 
-def get_all_agents() -> list:
-    """استرجاع قائمة بجميع المجهزين."""
-    query = "SELECT id, name, secret_code FROM Agents ORDER BY name"
+def update_shop_details(shop_id, new_name, new_url):
+    """تحديث اسم ورابط محل محدد."""
+    query = "UPDATE Shops SET name = %s, url = %s WHERE id = %s"
+    return execute_query(query, (new_name, new_url, shop_id))
+
+def delete_shop(shop_id):
+    """حذف محل محدد بواسطة ID وحذف كل ارتباطاته بالمجهزين. 👈🏼 تم الإضافة"""
+    try:
+        # 1. حذف ارتباطات المجهزين أولاً (AgentShops)
+        delete_assignments_query = "DELETE FROM AgentShops WHERE shop_id = %s"
+        execute_query(delete_assignments_query, (shop_id,))
+        
+        # 2. حذف المحل نفسه (Shops)
+        delete_shop_query = "DELETE FROM Shops WHERE id = %s"
+        execute_query(delete_shop_query, (shop_id,))
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting shop {shop_id}: {e}")
+        return False
+
+# ------------------------------------------------------------------------------------------------
+# دوال المجهزين (Agents)
+# ------------------------------------------------------------------------------------------------
+
+def add_agent(name: str, secret_code: str):
+    """إضافة مجهز جديد."""
+    query = "INSERT INTO Agents (name, secret_code) VALUES (%s, %s)"
+    return execute_query(query, (name, secret_code))
+
+def get_all_agents():
+    """جلب جميع المجهزين."""
+    query = "SELECT id, name FROM Agents ORDER BY name"
     return execute_query(query, fetch_all=True)
 
-def get_agent_name_by_id(agent_id: int) -> str | None:
-    """استرجاع اسم المجهز بواسطة ID."""
+def get_agent_name_by_id(agent_id: int):
+    """جلب اسم مجهز بواسطة ID."""
     query = "SELECT name FROM Agents WHERE id = %s"
     result = execute_query(query, (agent_id,), fetch_one=True)
     return result['name'] if result else None
-
-def get_assigned_shop_ids(agent_id: int) -> list[int]:
-    """استرجاع IDs المحلات المرتبطة بمجهز معين."""
-    results = execute_query(
-        "SELECT shop_id FROM AgentShops WHERE agent_id = %s", 
-        (agent_id,), 
-        fetch_all=True
-    )
-    # تحويل قائمة القواميس إلى قائمة من الـ ID (int)
-    return [row['shop_id'] for row in results] if results else []
-
-def check_agent_code(agent_code: str) -> dict | None:
-    """تتحقق من وجود رمز الدخول السري للمجهز في قاعدة البيانات وترجع معلوماته."""
-    agent = execute_query(
-        "SELECT id, telegram_id, name FROM Agents WHERE secret_code = %s", 
-        (agent_code,), 
-        fetch_one=True
-    )
-    return agent # ترجع قاموس أو None
-
-# ------------------------------------------------------------------------------------------------
-# دوال التحديث والربط (التي سببت مشاكل الـ Import)
-# ------------------------------------------------------------------------------------------------
-def toggle_agent_shop_assignment(agent_id: int, shop_id: int, is_assigned: bool) -> bool:
-    """تقوم بربط أو إلغاء ربط محل معين بمجهز معين في قاعدة البيانات."""
-    try:
-        if is_assigned:
-            # الربط: INSERT
-            execute_query(
-                "INSERT INTO AgentShops (agent_id, shop_id) VALUES (%s, %s)",
-                (agent_id, shop_id)
-            )
-        else:
-            # إلغاء الربط: DELETE
-            execute_query(
-                "DELETE FROM AgentShops WHERE agent_id = %s AND shop_id = %s",
-                (agent_id, shop_id)
-            )
-        return True
-    except psycopg2.IntegrityError:
-        # إذا حاولنا الإضافة وموجود بالفعل (لا مشكلة)
-        return True
-    except Exception:
-        return False
 
 def update_agent_details(agent_id, new_name, new_code):
     """تحديث اسم ورمز الدخول لمجهز محدد بواسطة ID."""
@@ -192,68 +172,69 @@ def update_agent_details(agent_id, new_name, new_code):
         # 2. تنفيذ التحديث
         execute_query(update_query, (new_name, new_code, agent_id))
         return True
-    except Exception:
-        return False
-        
-# ------------------------------------------------------------------------------------------------
-# الدالة الجديدة: تحديث تفاصيل المحل 👈🏼 تم الإضافة
-# ------------------------------------------------------------------------------------------------
-def update_shop_details(shop_id: int, new_name: str, new_url: str) -> bool:
-    """تحديث اسم ورابط محل محدد بواسطة ID."""
-    try:
-        # التحقق من أن الاسم الجديد غير مستخدم من قبل محل آخر (باستثناء المحل الحالي)
-        check_query = "SELECT id FROM Shops WHERE name = %s AND id != %s"
-        existing_shop = execute_query(check_query, (new_name, shop_id), fetch_one=True)
-        if existing_shop:
-            return False # الاسم مستخدم بالفعل
-            
-        update_query = "UPDATE Shops SET name = %s, url = %s WHERE id = %s"
-        return execute_query(update_query, (new_name, new_url, shop_id))
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error updating agent details: {e}")
         return False
 
-# ------------------------------------------------------------------------------------------------
-# الدالة الجديدة: حذف المحل 👈🏼 تم الإضافة
-# ------------------------------------------------------------------------------------------------
-def delete_shop(shop_id: int) -> bool:
-    """حذف محل بواسطة ID وحذف جميع ارتباطاته بالمجهزين."""
+def delete_agent(agent_id):
+    """حذف مجهز محدد بواسطة ID وحذف كل ارتباطاته بالمحلات. 👈🏼 تم الإضافة"""
     try:
-        # 1. حذف الارتباطات من جدول AgentShops أولاً
-        execute_query("DELETE FROM AgentShops WHERE shop_id = %s", (shop_id,))
+        # 1. حذف ارتباطات المحلات أولاً (AgentShops)
+        delete_assignments_query = "DELETE FROM AgentShops WHERE agent_id = %s"
+        execute_query(delete_assignments_query, (agent_id,))
         
-        # 2. حذف المحل نفسه من جدول Shops
-        execute_query("DELETE FROM Shops WHERE id = %s", (shop_id,))
+        # 2. حذف المجهز نفسه (Agents)
+        delete_agent_query = "DELETE FROM Agents WHERE id = %s"
+        execute_query(delete_agent_query, (agent_id,))
         
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error deleting agent {agent_id}: {e}")
         return False
 
 # ------------------------------------------------------------------------------------------------
-# الدالة الجديدة: حذف المجهز 👈🏼 تم الإضافة
+# دوال الربط (Assignment)
 # ------------------------------------------------------------------------------------------------
-def delete_agent(agent_id: int) -> bool:
-    """حذف مجهز بواسطة ID وحذف جميع ارتباطاته بالمحلات."""
+
+def get_assigned_shop_ids(agent_id: int):
+    """جلب قائمة بـ ID المحلات المخصصة لمجهز معين."""
+    query = "SELECT shop_id FROM AgentShops WHERE agent_id = %s"
+    results = execute_query(query, (agent_id,), fetch_all=True)
+    # تحويل قائمة القواميس إلى قائمة من الأرقام الصحيحة
+    return [row['shop_id'] for row in results] if results else []
+
+def toggle_agent_shop_assignment(agent_id: int, shop_id: int, assign: bool):
+    """ربط أو إلغاء ربط محل بمجهز محدد."""
+    if assign:
+        query = "INSERT INTO AgentShops (agent_id, shop_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
+    else:
+        query = "DELETE FROM AgentShops WHERE agent_id = %s AND shop_id = %s"
+        
+    return execute_query(query, (agent_id, shop_id))
+
+# ------------------------------------------------------------------------------------------------
+# دوال تسجيل الدخول والبحث
+# ------------------------------------------------------------------------------------------------
+
+def check_agent_code(agent_code: str):
+    """
+    تتحقق من وجود رمز الدخول السري للمجهز في قاعدة البيانات وترجع معلوماته.
+    """
     try:
-        # 1. حذف الارتباطات من جدول AgentShops أولاً
-        execute_query("DELETE FROM AgentShops WHERE agent_id = %s", (agent_id,))
-        
-        # 2. حذف المجهز نفسه من جدول Agents
-        execute_query("DELETE FROM Agents WHERE id = %s", (agent_id,))
-        
-        return True
+        agent = execute_query(
+            "SELECT id, telegram_id, name FROM Agents WHERE secret_code = %s", 
+            (agent_code,), 
+            fetch_one=True
+        )
+        return agent # ترجع قاموس أو None
     except Exception:
-        return False
+        return None
 
-# ------------------------------------------------------------------------------------------------
-# الدالة الجديدة: جلب المحلات المخصصة بناءً على البحث
-# ------------------------------------------------------------------------------------------------
 def get_agent_shops_by_search(agent_id: int, search_term: str):
     """
     تجلب المحلات المخصصة لمجهز معين والتي يتطابق اسمها جزئياً مع نص البحث.
     """
     try:
-        # استخدام LIKE للحصول على نتائج جزئية
-        # %s% يعني: البحث عن نص البحث في أي مكان في اسم المحل
         query = """
             SELECT T1.id, T1.name, T1.url 
             FROM Shops AS T1
@@ -261,38 +242,31 @@ def get_agent_shops_by_search(agent_id: int, search_term: str):
             WHERE T2.agent_id = %s AND T1.name ILIKE %s
             ORDER BY T1.name
         """
-        # إضافة علامات النسبة المئوية حول مصطلح البحث
         search_pattern = f"%{search_term}%" 
         
         results = execute_query(query, (agent_id, search_pattern), fetch_all=True)
         
         return results if results else []
     except Exception as e:
-        # يمكنك إضافة طباعة الخطأ للتتبع
-        # logger.error(f"DB Error in get_agent_shops_by_search: {e}")
+        logger.error(f"DB Error in get_agent_shops_by_search: {e}")
         return []
 
-# ------------------------------------------------------------------------------------------------
-# الدالة الجديدة: جلب المحلات بناءً على البحث (للمدير)
-# ------------------------------------------------------------------------------------------------
 def get_shops_by_search(search_term: str):
     """
     تجلب المحلات التي يتطابق اسمها جزئياً مع نص البحث للمدير.
     """
     try:
-        # استخدام ILIKE للبحث الجزئي دون الاهتمام بحالة الأحرف
         query = """
             SELECT id, name, url 
             FROM Shops 
             WHERE name ILIKE %s
             ORDER BY name
         """
-        # إضافة علامات النسبة المئوية حول مصطلح البحث
         search_pattern = f"%{search_term}%" 
         
         results = execute_query(query, (search_pattern,), fetch_all=True)
         
         return results if results else []
     except Exception as e:
-        # logger.error(f"DB Error in get_shops_by_search: {e}")
+        logger.error(f"DB Error in get_shops_by_search: {e}")
         return []
