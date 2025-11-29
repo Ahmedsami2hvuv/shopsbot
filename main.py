@@ -720,7 +720,8 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
-                CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|show_shops_admin|admin_menu)$"),
+                CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
+                CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
             ],
             
             ADD_SHOP_STATE: [
