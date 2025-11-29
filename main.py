@@ -143,63 +143,53 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # دوال عرض المحلات (Show Shops State)
 # ----------------------------------------------------------------------
 
+# في ملف main (1) (8).py
+
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع التصحيح التلقائي للروابط)."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (بإرسال رسالة جديدة)."""
     
     query = update.callback_query
     
-    # 1. الرد الفوري على الضغطة لمنع الصمت
+    # 1. الرد الفوري على الضغطة (إظهار الإشعار فقط)
     try:
         await query.answer("⏳ جاري جلب المحلات...") 
     except Exception:
-        pass # نتجاهل خطأ الرد ونكمل
+        pass 
 
     shops = []
     
     # 2. محاولة جلب البيانات
     try:
         shops = get_all_shops() 
-        logger.info(f"Successfully fetched {len(shops)} shops for admin.")
     except Exception as e:
         logger.error(f"Error fetching shops for admin: {e}")
-        
         text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات."
-        keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        try:
-            await query.edit_message_text(text=text, reply_markup=reply_markup)
-        except Exception:
-            await update.effective_message.reply_text(text=text, reply_markup=reply_markup)
-            
+        # نستخدم reply_text هنا بدلاً من edit_message_text لتجنب الفشل
+        await update.effective_message.reply_text(text=text)
         return ADMIN_MENU 
 
     keyboard = []
     
-    # 3. بناء القائمة النهائية (باستخدام WebAppInfo الصحيح)
+    # 3. بناء قائمة الأزرار بالـ WebApp (هذا ما تريده بالضبط)
     if shops:
         text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**" 
         current_row = []
         for i, shop in enumerate(shops):
             
-            # 🟢 الحل النهائي: التحقق والتصحيح التلقائي لرابط الـ WebApp 🟢
             shop_url = shop['url']
             
-            # التأكد من أن الرابط يبدأ بـ http أو https. إذا لم يكن، نصححه.
+            # التصحيح التلقائي للرابط (ضمان http/https)
             if not shop_url.lower().startswith(('http://', 'https://')):
-                 # إضافة https:// إذا كان الرابط لا يحتوي على بروتوكول (البروتوكول ضروري)
                  shop_url = "https://" + shop_url 
-                 # يمكنك إزالة سطر logger.warning إذا كنت لا تحتاج لتسجيل الأخطاء
-                 logger.warning(f"Shop URL for {shop['name']} corrected to: {shop_url}") 
             
+            # الزر الذي يفتح WebApp
             button = InlineKeyboardButton(
                 text=shop['name'], 
                 web_app=WebAppInfo(url=shop_url)
             )
-            
             current_row.append(button)
             
-            # 3 أزرار في الصف كحد أقصى
             if len(current_row) == 3 or i == len(shops) - 1:
                 keyboard.append(current_row)
                 current_row = []
@@ -212,21 +202,24 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # 4. محاولة تعديل الرسالة، وفي حال الفشل إرسال رسالة جديدة
+    # 4. 🚀 الحل النهائي: إرسال رسالة جديدة بدلاً من تعديل الرسالة القديمة 🚀
+    # هذا يحل المشكلة نهائياً حيث أن تعديل رسالة بأزرار WebApp هو ما كان يفشل.
     try:
-        await query.edit_message_text(
+        # نحذف الرسالة القديمة إذا أمكن (لتنظيف المحادثة)
+        try:
+             await update.effective_message.delete()
+        except Exception:
+             pass 
+
+        await update.effective_message.reply_text(
             text=text, 
             reply_markup=reply_markup,
             parse_mode="Markdown" 
         )
     except Exception as e:
-         # 5. في حال فشل التعديل، إرسال رسالة جديدة كحل أخير ومؤكد
-         logger.error(f"Failed to edit message, sending new one (final fix): {e}")
-         await update.effective_message.reply_text(
-            text="⚠️ لم يتمكن البوت من تحديث الرسالة. إليك القائمة:\n" + text, 
-            reply_markup=reply_markup,
-            parse_mode="Markdown" 
-         )
+         logger.error(f"Final attempt failed to reply with WebApp buttons: {e}")
+         # حل أخير في حال فشل الإرسال أيضاً (يرسل نص عادي بدون أزرار)
+         await update.effective_message.reply_text("⚠️ فشل في عرض قائمة المحلات بشكل كامل. الرجاء التحقق من الـ Logs.")
     
     return ADMIN_MENU
 
