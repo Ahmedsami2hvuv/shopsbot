@@ -22,7 +22,7 @@ from database import (
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
     check_agent_code,
-    update_agent_details # <<< تم إضافة دالة التحديث
+    update_agent_details
 ) 
 
 # تعريف حالات المحادثة
@@ -106,15 +106,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return AGENT_LOGIN
 
 async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعالج الأزرار اللي تنضغط بقائمة المدير."""
+    """يعالج الأزرار اللي تنضغط بقائمة المدير (ما عدا عرض المحلات)."""
     query = update.callback_query
     data = query.data
     
     if data == "admin_menu": 
         return await show_admin_menu(update, context)
 
-    if data == "show_shops_admin":
-        return await show_shops_admin_handler(update, context)
+    # ** ملاحظة: تم حذف معالجة "show_shops_admin" من هنا **
+    # لأنها أصبحت تعالج مباشرة في ConversationHandler
 
     if data == "add_shop":
         await query.answer()
@@ -144,7 +144,7 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (تم التأكيد على WebAppInfo)."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن."""
     
     query = update.callback_query
     await query.answer() 
@@ -365,7 +365,7 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(
         f"✏️ **تعديل تفاصيل المجهز {agent_name}:**\n"
         "إرسل الإسم الجديد للمجهز بالسطر الأول، ورمز الدخول السري الجديد بالسطر الثاني. \n"
-        "سيتم حفظ التغييرات عند الإرسال.", # <<< تم إزالة الرسالة المؤقتة
+        "سيتم حفظ التغييرات عند الإرسال.",
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
@@ -720,6 +720,7 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
+                # 👇 التعديل الأهم: فصل معالج عرض المحلات ليعمل بشكل سليم
                 CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
             ],
