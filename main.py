@@ -22,7 +22,8 @@ from database import (
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
     check_agent_code,
-    update_agent_details
+    update_agent_details,
+    delete_shop # 👈🏼 تم الإضافة
 ) 
 
 # تعريف حالات المحادثة
@@ -35,8 +36,9 @@ from database import (
     AGENT_MENU,         
     MANAGE_AGENT,       
     SELECT_SHOPS,
-    EDIT_AGENT_DETAILS 
-) = range(9)
+    EDIT_AGENT_DETAILS,
+    DELETE_SHOP_STATE # 👈🏼 تم الإضافة
+) = range(10) # 👈🏼 تم التحديث إلى range(10)
 
 # تعريف الـ Admin IDs (الناس اللي عدها صلاحية الإدارة)
 ADMIN_IDS = [7032076289] # آيدي التليجرام مالتك
@@ -57,7 +59,8 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """تظهر قائمة خيارات المدير، وتُستخدم للرجوع من أي قائمة فرعية."""
     keyboard = [
         [InlineKeyboardButton("عرض المحلات 📊", callback_data="show_shops_admin")],
-        [InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop")],
+        [InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop"), 
+         InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], # 👈🏼 تم إضافة زر الحذف
         [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -106,15 +109,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return AGENT_LOGIN
 
 async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعالج الأزرار اللي تنضغط بقائمة المدير (ما عدا عرض المحلات)."""
+    """يعالج الأزرار اللي تنضغط بقائمة المدير (ما عدا عرض المحلات وحذف المحل)."""
     query = update.callback_query
     data = query.data
     
     if data == "admin_menu": 
         return await show_admin_menu(update, context)
-
-    # ** ملاحظة: تم حذف معالجة "show_shops_admin" من هنا **
-    # لأنها أصبحت تعالج مباشرة في ConversationHandler
 
     if data == "add_shop":
         await query.answer()
@@ -215,6 +215,7 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
          logger.error(f"Final attempt failed to reply with WebApp buttons: {e}")
          # حل أخير جداً في حال فشل الإرسال (إرسال نص فقط بدون أزرار)
+         # هذا الجزء هو ما كان يظهر لك المشكلة
          text_only_fallback = "⚠️ فشل إرسال قائمة المحلات المزودة بروابط الويب. هذا يؤكد أن المشكلة في الروابط المخزنة في قاعدة البيانات. القائمة المتوفرة هي:\n" + "\n".join([shop['name'] + " (" + shop['url'] + ")" for shop in shops])
          await update.effective_message.reply_text(text_only_fallback)
     
@@ -262,6 +263,63 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("❌ حدث خطأ غير متوقع أثناء إضافة المحل.")
 
     return ADMIN_MENU
+
+
+# ----------------------------------------------------------------------
+# دوال حذف المحلات (Delete Shop State) 👈🏼 تم الإضافة هنا
+# ----------------------------------------------------------------------
+
+async def list_shops_to_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تعرض قائمة المحلات كأزرار لحذفها."""
+    query = update.callback_query
+    await query.answer()
+    
+    shops = get_all_shops()
+    keyboard = []
+    
+    if shops:
+        text = "🗑️ **إختر المحل الذي تريد حذفه نهائياً:**"
+        for shop in shops:
+            # اسم المحل ورابط البيانات للحذف
+            callback_data = f"delete_shop_confirm_{shop['id']}" 
+            keyboard.append([InlineKeyboardButton(f"❌ {shop['name']}", callback_data=callback_data)])
+    else:
+        text = "❌ لا توجد محلات مُضافة حالياً لحذفها."
+
+    keyboard.append([InlineKeyboardButton("🔙 إلغاء والعودة", callback_data="admin_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        text=text, 
+        reply_markup=reply_markup,
+        parse_mode="Markdown" 
+    )
+    return DELETE_SHOP_STATE
+
+
+async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يؤكد ويحذف المحل المحدد."""
+    query = update.callback_query
+    await query.answer()
+
+    # استخلاص ID المحل واسمه
+    try:
+        shop_id = int(query.data.split('_')[-1])
+        shops = get_all_shops()
+        shop_name = next((shop['name'] for shop in shops if shop['id'] == shop_id), f"المحل رقم {shop_id}")
+        
+    except:
+        await query.edit_message_text("❌ حدث خطأ في تحديد المحل.")
+        return await show_admin_menu(update, context)
+
+    # محاولة الحذف
+    if delete_shop(shop_id):
+        await query.edit_message_text(f"✅ تم حذف المحل **{shop_name}** بنجاح!")
+    else:
+        await query.edit_message_text("❌ فشل حذف المحل. تأكد من اتصال قاعدة البيانات.")
+    
+    # العودة إلى قائمة المدير
+    return await show_admin_menu(update, context)
 
 # ----------------------------------------------------------------------
 # دوال إدارة المجهزين (Agent Management)
@@ -713,7 +771,12 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
         current_row = []
         for i, shop in enumerate(agent_shops):
             # *** هنا يكمن الحل! استخدام WebAppInfo لفتح الويب فيو ***
-            button = InlineKeyboardButton(shop['name'], web_app=WebAppInfo(url=shop['url']))
+            # إضافة تصحيح للرابط هنا أيضاً للتأكد من عمله للمجهز
+            shop_url = shop['url']
+            if not shop_url.lower().startswith(('http://', 'https://')):
+                 shop_url = "https://" + shop_url 
+
+            button = InlineKeyboardButton(shop['name'], web_app=WebAppInfo(url=shop_url))
             current_row.append(button)
             
             if len(current_row) == 2 or i == len(agent_shops) - 1: # نضع زرين في الصف
@@ -757,6 +820,8 @@ def main() -> None:
             ADMIN_MENU: [
                 # 👇 هذا الجزء صحيح ومفصول لضمان الأولوية
                 CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
+                # 👇 إضافة معالج زر الحذف هنا
+                CallbackQueryHandler(list_shops_to_delete, pattern="^delete_shop$"),
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
             ],
             
@@ -795,6 +860,12 @@ def main() -> None:
                 # العودة من شاشة تعديل التفاصيل
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details), # دالة الحفظ الفعلية
+            ],
+            
+            # 👇 إضافة حالة حذف المحلات هنا
+            DELETE_SHOP_STATE: [
+                CallbackQueryHandler(show_admin_menu, pattern="^admin_menu$"), # زر الإلغاء
+                CallbackQueryHandler(confirm_shop_deletion, pattern="^delete_shop_confirm_\d+$"),
             ],
             
             AGENT_LOGIN: [
