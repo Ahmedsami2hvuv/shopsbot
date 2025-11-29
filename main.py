@@ -66,27 +66,38 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة البداية للمستخدم."""
+    """يعرض قائمة البداية للمستخدم ويتعرف على المدير."""
     
+    # 1. تحديد المصدر والرسالة
     if update.callback_query:
-        # إذا كانت الدالة تم استدعاؤها من CallbackQuery (مثل تسجيل الخروج)، نستخدم update.callback_query.message
+        # 🚨 التعديل هنا: عند الرجوع بالـ callback، لا نستخدم update.callback_query.message
+        # لتجنب خطأ تعديل رسالة محذوفة أو قديمة، بل نستخدم effective_message
         message = update.callback_query.message
     elif update.message:
         message = update.message
     else:
-        return MAIN_MENU
+        # إذا لم يكن هناك رسالة أو استدعاء، نرجع للقائمة الرئيسية
+        return MAIN_MENU 
+        
+    user_id = update.effective_user.id
         
     # إزالة البيانات المخزنة من المحادثة السابقة
     context.user_data.clear()
         
-    # FIX: إزالة زر المدير وتعديل نص زر المجهز
+    # 2. التحقق من هوية المدير
+    if is_admin(user_id):
+        # ✅ الحل: إذا كان المدير، يتم نقله مباشرة إلى قائمة الإدارة
+        # نستخدم is_command=True لضمان إرسال رسالة جديدة بدلاً من تعديلها
+        return await show_admin_menu(update, context, is_command=True) 
+    
+    # 3. إذا لم يكن المدير، يتم عرض قائمة الدخول العادية
     keyboard = [
         [InlineKeyboardButton("إدخال رقمك السري 🔑", callback_data="agent_login_prompt")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await message.reply_text(
-        "👋🏼 أهلاً بك! إختار:", # تم تعديل النص
+        "👋🏼 أهلاً بك! إختار:",
         reply_markup=reply_markup
     )
     return MAIN_MENU
