@@ -143,10 +143,8 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # دوال عرض المحلات (Show Shops State)
 # ----------------------------------------------------------------------
 
-
-
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع معالجة الأخطاء)."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع التصحيح التلقائي للروابط)."""
     
     query = update.callback_query
     
@@ -158,10 +156,10 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     shops = []
     
-    # 2. محاولة جلب البيانات مع معالجة أخطاء قاعدة البيانات
+    # 2. محاولة جلب البيانات
     try:
         shops = get_all_shops() 
-        logger.info(f"Successfully fetched {len(shops)} shops for admin.") # تسجيل عدد المحلات في السجل
+        logger.info(f"Successfully fetched {len(shops)} shops for admin.")
     except Exception as e:
         logger.error(f"Error fetching shops for admin: {e}")
         
@@ -178,18 +176,25 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     keyboard = []
     
-    # 3. بناء القائمة النهائية (تجربة زر عادي بدلاً من WebApp لحل المشكلة)
+    # 3. بناء القائمة النهائية (باستخدام WebAppInfo الصحيح)
     if shops:
-        # ⚠️ ملاحظة هامة للمدير: الزر لا يفتح نافذة ويب الآن، هو مجرد اختبار.
-        text = "📊 **إختر المحل لفتح نافذة الطلبات (رسالة اختبار: الأزرار لا تعمل الآن):**" 
+        text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**" 
         current_row = []
         for i, shop in enumerate(shops):
             
-            # 🛑 التعديل التجريبي: نستخدم CallbackQuery عادي بدلاً من WebAppInfo
-            # إذا ظهرت هذه القائمة، فهذا يؤكد أن مشكلتنا في WebAppInfo/الرابط
+            # 🟢 الحل النهائي: التحقق والتصحيح التلقائي لرابط الـ WebApp 🟢
+            shop_url = shop['url']
+            
+            # التأكد من أن الرابط يبدأ بـ http أو https. إذا لم يكن، نصححه.
+            if not shop_url.lower().startswith(('http://', 'https://')):
+                 # إضافة https:// إذا كان الرابط لا يحتوي على بروتوكول (البروتوكول ضروري)
+                 shop_url = "https://" + shop_url 
+                 # يمكنك إزالة سطر logger.warning إذا كنت لا تحتاج لتسجيل الأخطاء
+                 logger.warning(f"Shop URL for {shop['name']} corrected to: {shop_url}") 
+            
             button = InlineKeyboardButton(
-                text=f"TEST: {shop['name']}", 
-                callback_data=f"temp_shop_button_{shop['id']}" # زر عادي لتجنب فشل WebApp
+                text=shop['name'], 
+                web_app=WebAppInfo(url=shop_url)
             )
             
             current_row.append(button)
@@ -216,16 +221,14 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
         )
     except Exception as e:
          # 5. في حال فشل التعديل، إرسال رسالة جديدة كحل أخير ومؤكد
-         logger.error(f"Failed to edit message, sending new one (even with fallback): {e}")
+         logger.error(f"Failed to edit message, sending new one (final fix): {e}")
          await update.effective_message.reply_text(
-            text="⚠️ فشل عرض القائمة! إليك رسالة العودة للقائمة:\n" + text, 
+            text="⚠️ لم يتمكن البوت من تحديث الرسالة. إليك القائمة:\n" + text, 
             reply_markup=reply_markup,
             parse_mode="Markdown" 
          )
     
     return ADMIN_MENU
-
-
 
 
 # ----------------------------------------------------------------------
