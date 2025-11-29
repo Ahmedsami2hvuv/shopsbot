@@ -12,12 +12,12 @@ from telegram.ext import (
     filters
 )
 # استدعاء كل الدوال اللازمة من database.py 
-# تم إضافة: update_shop_details و delete_agent
+# 🚨 ملاحظة: يجب التأكد من وجود هذه الدوال في ملف database.py
 from database import (
     setup_db, 
     add_shop, 
     get_all_shops, 
-    update_shop_details, # 👈🏼 جديد: لتعديل تفاصيل المحل
+    update_shop_details, # 👈🏼 لتعديل تفاصيل المحل
     delete_shop,         # 👈🏼 لحذف المحل
     add_agent, 
     get_all_agents, 
@@ -25,8 +25,8 @@ from database import (
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
     check_agent_code,
-    update_agent_details,
-    delete_agent         # 👈🏼 جديد: لحذف المجهز
+    update_agent_details, # 👈🏼 لتعديل تفاصيل المجهز
+    delete_agent         # 👈🏼 لحذف المجهز
 ) 
 
 # تعريف حالات المحادثة
@@ -66,7 +66,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         [InlineKeyboardButton("عرض المحلات 📊", callback_data="show_shops_admin")],
         [InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop"), 
          InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], 
-        [InlineKeyboardButton("تعديل محل ✏️", callback_data="edit_shops")], # 👈🏼 الزر الجديد
+        [InlineKeyboardButton("تعديل محل ✏️", callback_data="edit_shops")], 
         [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -77,8 +77,8 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.callback_query.answer()
         try:
              await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
-        except:
-             # في حال كان التعديل يحتاج إلى إرسال رسالة جديدة
+        except Exception:
+             # في حال كان التعديل يحتاج إلى إرسال رسالة جديدة (خطأ Edit)
              await update.callback_query.message.reply_text(text=text, reply_markup=reply_markup)
 
     elif update.message:
@@ -119,7 +119,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return AGENT_LOGIN
 
 async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعالج الأزرار اللي تنضغط بقائمة المدير (ما عدا عرض المحلات وحذف المحل)."""
+    """يعالج الأزرار اللي تنضغط بقائمة المدير."""
     query = update.callback_query
     data = query.data
     
@@ -147,7 +147,6 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if data == "manage_agents":
         return await manage_agents_menu(update, context)
     
-    # معالج جديد لزر "تعديل المحلات"
     if data == "edit_shops":
         return await list_shops_to_edit(update, context)
     
@@ -188,7 +187,6 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            # استخدام 'url' مباشرة لفتح الرابط
             button = InlineKeyboardButton(
                 text=f"🔗 {shop['name']}", 
                 url=shop_url
@@ -204,16 +202,10 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        if query:
-             await query.edit_message_text(
-                text=text, 
-                reply_markup=reply_markup,
-            )
-        else:
-             await update.effective_message.reply_text(
-                text=text, 
-                reply_markup=reply_markup,
-            )
+        await query.edit_message_text(
+            text=text, 
+            reply_markup=reply_markup,
+        )
     except Exception as e:
          logger.error(f"Failed to reply with WebApp buttons: {e}")
          text_only_fallback = "⚠️ فشل إرسال قائمة المحلات. القائمة المتوفرة:\n" + "\n".join([shop['name'] + " (" + shop['url'] + ")" for shop in shops])
@@ -302,9 +294,7 @@ async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     try:
-        # استخلاص الـ ID من الـ callback_data
         shop_id = int(query.data.split('_')[-1])
-        # نحتاج لجلب الاسم قبل الحذف لطباعته في رسالة التأكيد
         shops = get_all_shops()
         shop_name = next((shop['name'] for shop in shops if shop['id'] == shop_id), f"المحل رقم {shop_id}")
         
@@ -356,7 +346,6 @@ async def prompt_edit_shop_details(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
 
     try:
-        # استخلاص الـ ID من الـ callback_data
         shop_id = int(query.data.split('_')[-1])
         context.user_data['selected_shop_id'] = shop_id
         
@@ -368,7 +357,7 @@ async def prompt_edit_shop_details(update: Update, context: ContextTypes.DEFAULT
         return await show_admin_menu(update, context)
 
     keyboard = [
-        [InlineKeyboardButton("🔙 إلغاء والعودة للقائمة", callback_data="edit_shops")] # العودة إلى قائمة المحلات للتعديل
+        [InlineKeyboardButton("🔙 إلغاء والعودة للقائمة", callback_data="edit_shops")] 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -401,12 +390,11 @@ async def receive_updated_shop_data(update: Update, context: ContextTypes.DEFAUL
                 "إسم المحل الجديد\n"
                 "رابط المحل الجديد (URL)"
             )
-            return EDIT_SHOP_STATE # العودة لنفس الحالة للسماح بإعادة الإدخال
+            return EDIT_SHOP_STATE 
 
         new_shop_name = parts[0].strip()
         new_shop_url = parts[1].strip()
 
-        # 🚨 استخدام دالة update_shop_details
         if update_shop_details(shop_id, new_shop_name, new_shop_url): 
              await update.message.reply_text(
                 f"✅ تم تحديث تفاصيل المحل **{new_shop_name}** بنجاح!",
@@ -421,7 +409,6 @@ async def receive_updated_shop_data(update: Update, context: ContextTypes.DEFAUL
         logger.error(f"Error updating shop: {e}")
         await update.message.reply_text("❌ حدث خطأ غير متوقع أثناء تحديث المحل.")
 
-    # العودة إلى قائمة المدير
     return await show_admin_menu(update, context)
 
 
@@ -437,7 +424,7 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     keyboard = [
         [InlineKeyboardButton("إضافة مجهز جديد ➕", callback_data="add_new_agent")], 
         [InlineKeyboardButton("عرض وتعديل المجهزين 📄", callback_data="list_agents")],
-        [InlineKeyboardButton("حذف مجهز 🗑️", callback_data="delete_agent")], # 👈🏼 الزر الجديد
+        [InlineKeyboardButton("حذف مجهز 🗑️", callback_data="delete_agent")], 
         [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -486,11 +473,9 @@ async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يعرض خيارات التعديل لمجهز محدد."""
     
-    # هذه الدالة تُستدعى بواسطة زر أو بواسطة الدالة نفسها (مثل بعد التعديل)
     if update.callback_query:
         query = update.callback_query
         
-        # إذا كان الدخول من زر تحديد المجهز أو من زر تعديل التفاصيل
         if query.data and query.data.startswith(("select_agent_", "edit_details_")):
             try:
                 agent_id = int(query.data.split('_')[-1])
@@ -501,7 +486,6 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         agent_id = context.user_data.get('selected_agent_id')
 
         if agent_id:
-            # تحديث المحلات المعينة المؤقتة عند دخول القائمة
             try:
                 assigned_ids = get_assigned_shop_ids(agent_id)
                 context.user_data['temp_assigned_shops'] = set(assigned_ids)
@@ -606,7 +590,6 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
             parse_mode="Markdown"
         )
     elif result == "CODE_EXISTS":
-        # إضافة أزرار العودة هنا
         keyboard = [
             [InlineKeyboardButton("↩️ إعادة إدخال التفاصيل", callback_data=f"edit_details_{agent_id}")],
             [InlineKeyboardButton("🔙 العودة لخيارات المجهز", callback_data=f"select_agent_{agent_id}")]
@@ -617,7 +600,6 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
-        # العودة إلى MANAGE_AGENT لمعالجة ضغطات الأزرار
         return MANAGE_AGENT
 
     else:
@@ -640,10 +622,8 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
     shops = get_all_shops()
     agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
     
-    # المحلات المحددة مؤقتاً في هذه الجلسة
     selected_shops = context.user_data.get('temp_assigned_shops', set())
 
-    # الترتيب: المحلات المربوطة أولاً، ثم الباقي، والكل مرتب حسب الاسم
     def sort_shops_key(shop):
         is_assigned_flag = 0 if shop['id'] in selected_shops else 1
         return (is_assigned_flag, shop['name'])
@@ -669,7 +649,6 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
         callback_data = f"toggle_shop_{shop_id}"
         keyboard.append([InlineKeyboardButton(f"{emoji}{shop['name']}", callback_data=callback_data)])
 
-    # أزرار الإجراءات
     keyboard.append([InlineKeyboardButton("✅ تأكيد وحفظ الربط", callback_data="confirm_shop_assignment")])
     keyboard.append([InlineKeyboardButton("🔙 إلغاء والعودة لخيارات المجهز", callback_data=f"select_agent_{agent_id}")])
     
@@ -767,7 +746,6 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parts = text.split('\n', 1) 
         
         if len(parts) != 2:
-            # إضافة أزرار العودة هنا (صيغة الإدخال خطأ)
             keyboard = [
                 [InlineKeyboardButton("↩️ إعادة إدخال البيانات", callback_data="add_new_agent")],
                 [InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")]
@@ -779,7 +757,7 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "رمز الدخول السري",
                  reply_markup=reply_markup
             )
-            return MANAGE_AGENT # العودة إلى حالة Manage Agent لمعالجة أزرار العودة
+            return MANAGE_AGENT 
 
         agent_name = parts[0].strip()
         agent_code = parts[1].strip()
@@ -794,7 +772,6 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return MANAGE_AGENT
         else:
-            # إضافة أزرار العودة هنا (الرمز موجود مسبقاً)
             keyboard = [
                 [InlineKeyboardButton("↩️ إعادة إدخال الرمز", callback_data="add_new_agent")],
                 [InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")]
@@ -809,7 +786,6 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
     except Exception as e:
         logger.error(f"Error adding agent: {e}")
-        # إضافة أزرار العودة هنا (خطأ غير متوقع)
         keyboard = [
             [InlineKeyboardButton("↩️ إعادة إدخال البيانات", callback_data="add_new_agent")],
             [InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")]
@@ -858,16 +834,13 @@ async def confirm_agent_deletion(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
     try:
-        # استخلاص الـ ID من الـ callback_data
         agent_id = int(query.data.split('_')[-1])
-        # نحتاج لجلب الاسم قبل الحذف
         agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
         
     except:
         await query.edit_message_text("❌ حدث خطأ في تحديد المجهز.")
         return await manage_agents_menu(update, context)
 
-    # 🚨 استخدام دالة delete_agent التي يجب أن تكون مُعدلة في database.py
     if delete_agent(agent_id): 
         await query.edit_message_text(f"✅ تم حذف المجهز **{agent_name}** بنجاح! جميع ارتباطاته بالمحلات قد حُذفت أيضاً.")
     else:
@@ -962,7 +935,6 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
     shops = get_all_shops()
     agent_shops = [shop for shop in shops if shop['id'] in assigned_shop_ids]
 
-    # يتم فرز محلات المجهز أبجدياً بالاسم
     agent_shops.sort(key=lambda shop: shop['name'])
 
     keyboard = []
@@ -975,7 +947,6 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
 
-            # استخدام 'url' مباشرة 
             button = InlineKeyboardButton(f"🔗 {shop['name']}", url=shop_url)
             keyboard.append([button])
     else:
@@ -1016,7 +987,7 @@ def main() -> None:
             ADMIN_MENU: [
                 CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
                 CallbackQueryHandler(list_shops_to_delete, pattern="^delete_shop$"),
-                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), # 👈🏼 معالج تعديل المحلات
+                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
                 CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
             ],
             
@@ -1029,7 +1000,7 @@ def main() -> None:
                 CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
                 CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
-                CallbackQueryHandler(list_agents_to_delete, pattern="^delete_agent$"), # 👈🏼 معالج حذف المجهز
+                CallbackQueryHandler(list_agents_to_delete, pattern="^delete_agent$"),
                 
                 CallbackQueryHandler(edit_agent_details_menu, pattern="^edit_details_\d+$"),
                 
@@ -1037,7 +1008,6 @@ def main() -> None:
                 CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
             ],
             
-            # تم دمج معالجة العودة في هذه الحالة
             ADD_AGENT_STATE: [
                 CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_agent_data)
@@ -1049,7 +1019,6 @@ def main() -> None:
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
             ],
 
-            # تم دمج معالجة العودة في هذه الحالة
             EDIT_AGENT_DETAILS: [
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details), 
@@ -1060,14 +1029,14 @@ def main() -> None:
                 CallbackQueryHandler(confirm_shop_deletion, pattern="^delete_shop_confirm_\d+$"),
             ],
             
-            DELETE_AGENT_STATE: [ # 👈🏼 حالة حذف المجهز
+            DELETE_AGENT_STATE: [
                 CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
                 CallbackQueryHandler(confirm_agent_deletion, pattern="^delete_agent_confirm_\d+$"),
             ],
 
-            EDIT_SHOP_STATE: [ # 👈🏼 حالة تعديل المحل
-                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), # العودة لقائمة المحلات
-                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), # العودة للقائمة الرئيسية
+            EDIT_SHOP_STATE: [
+                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
+                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
                 CallbackQueryHandler(prompt_edit_shop_details, pattern="^edit_shop_select_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_updated_shop_data),
             ],
@@ -1092,8 +1061,29 @@ def main() -> None:
 
     application.add_handler(conv_handler)
 
-    logger.info("🤖 البوت جاي يشتغل (Long Polling)...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # -------------------------------------------------------------------
+    # 🚨 التعديل الحاسم للتشغيل على Railway (استخدام Webhook)
+    # -------------------------------------------------------------------
+    
+    # Railway يُحدد المنفذ تلقائياً في متغير البيئة PORT
+    PORT = int(os.environ.get('PORT', '8080')) 
+    # Railway يُوفر رابط المشروع الخارجي في متغير WEBHOOK_URL
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') 
+
+    if WEBHOOK_URL:
+         # وضعية التشغيل Webhook (للسيرفرات السحابية)
+         application.run_webhook(
+             listen="0.0.0.0", # ضروري للإستماع على جميع الواجهات
+             port=PORT,
+             url_path=BOT_TOKEN,  # نستخدم التوكن كمسار سري للـ Webhook
+             webhook_url=WEBHOOK_URL + BOT_TOKEN
+         )
+         logger.info(f"🤖 البوت جاي يشتغل بوضعية Webhook على الرابط: {WEBHOOK_URL}")
+    else:
+        # وضعية التشغيل Polling (للتجربة المحلية فقط)
+        logger.info("🤖 البوت جاي يشتغل بوضعية Polling...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # -------------------------------------------------------------------
 
 
 if __name__ == "__main__":
