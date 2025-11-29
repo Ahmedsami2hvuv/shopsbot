@@ -17,16 +17,18 @@ from database import (
     setup_db, 
     add_shop, 
     get_all_shops, 
-    update_shop_details, # 👈🏼 لتعديل تفاصيل المحل
-    delete_shop,         # 👈🏼 لحذف المحل
+    update_shop_details,
+    delete_shop,
     add_agent, 
     get_all_agents, 
     get_agent_name_by_id,
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
     check_agent_code,
-    update_agent_details, # 👈🏼 لتعديل تفاصيل المجهز
-    delete_agent         # 👈🏼 لحذف المجهز
+    update_agent_details,
+    delete_agent, 
+    # 👇🏼 تم تصحيح مكان الدالة وإضافة الفاصلة
+    get_agent_shops_by_search 
 ) 
 
 # تعريف حالات المحادثة
@@ -425,7 +427,7 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [InlineKeyboardButton("إضافة مجهز جديد ➕", callback_data="add_new_agent")], 
         [InlineKeyboardButton("عرض وتعديل المجهزين 📄", callback_data="list_agents")],
         [InlineKeyboardButton("حذف مجهز 🗑️", callback_data="delete_agent")], 
-        [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]
+        [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")] # 👈🏼 هنا التصحيح
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -434,7 +436,7 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
-    return MANAGE_AGENT
+    return MANAGE_AGENT # 👈🏼 يجب أن تبقى الحالة MANAGE_AGENT
 
 
 async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -897,27 +899,73 @@ async def agent_login_receive_code(update: Update, context: ContextTypes.DEFAULT
         )
         return AGENT_LOGIN
 
+async def agent_shop_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يستقبل نص البحث من المجهز ويعرض المحلات المطابقة."""
+
+    search_term = update.message.text.strip()
+    agent_id = context.user_data.get('current_agent_id')
+
+    if not agent_id:
+        await update.message.reply_text("❌ لم يتم تسجيل دخول المجهز.")
+        return AGENT_LOGIN
+
+    agent_shops = get_agent_shops_by_search(agent_id, search_term)
+
+    keyboard = []
+
+    if agent_shops:
+        text = f"✅ **نتائج البحث عن '{search_term}'** (إضغط لفتح رابط المحل):"
+        for shop in agent_shops:
+            shop_url = shop['url']
+            # للتأكد من أن الرابط يبدأ بـ https://
+            if not shop_url.lower().startswith(('http://', 'https://')):
+                 shop_url = "https://" + shop_url 
+
+            button = InlineKeyboardButton(f"🔗 {shop['name']}", url=shop_url)
+            keyboard.append([button])
+    else:
+        text = f"❌ لم يتم العثور على محلات مطابقة لـ '{search_term}' ضمن محلاتك المخصصة."
+
+    keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة", callback_data="agent_menu_back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+    return AGENT_MENU
+    
+
 async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تعرض قائمة المجهز بعد تسجيل الدخول."""
     
     agent_name = get_agent_name_by_id(context.user_data.get('current_agent_id')) or "عزيزي المجهز"
     
     keyboard = [
-        [InlineKeyboardButton("🏪 عرض محلاتي", callback_data="show_agent_shops")],
+        # 👇🏼 الزر الذي يعرض كل المحلات
+        [InlineKeyboardButton("🏪 عرض جميع محلاتي", callback_data="show_agent_shops")], 
         [InlineKeyboardButton("🚪 تسجيل خروج", callback_data="start")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    text = (
+        f"**قائمة المجهز {agent_name}:**\n إختر الإجراء المطلوب أو:\n\n"
+        "🔍 **للبحث السريع:** قم بإرسال أي جزء من إسم المحل (مثل: خالد). \n"
+        "ستظهر لك أزرار المحلات التي تطابق بحثك."
+    )
+
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(
-            f"**قائمة المجهز {agent_name}:**\n إختر الإجراء المطلوب:",
+            text,
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
     else:
         await update.message.reply_text(
-            f"**قائمة المجهز {agent_name}:**\n إختر الإجراء المطلوب:",
+            text,
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
@@ -1058,7 +1106,13 @@ def main() -> None:
             ],
 
             AGENT_MENU: [
+                 # 1. معالج ضغط الزر: يعرض كل المحلات المخصصة للمجهز
                  CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"), 
+                 
+                 # 2. معالج الرسائل النصية: يستقبل نص البحث ويجلب المحلات المطابقة
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, agent_shop_search_handler),
+                 
+                 # 3. العودة وتسجيل الخروج
                  CallbackQueryHandler(show_agent_menu, pattern="^agent_menu_back$"), 
                  CallbackQueryHandler(start_command, pattern="^start$"), 
                  CommandHandler("start", start_command), 
