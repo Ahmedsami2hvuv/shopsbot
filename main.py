@@ -816,94 +816,94 @@ def main() -> None:
         
         states={
             MAIN_MENU: [
-                 CallbackQueryHandler(admin_login, pattern="^admin_login$"),
-                 CallbackQueryHandler(agent_login_prompt, pattern="^agent_login_prompt$"),
+                 CallbackQueryHandler(admin_login, pattern=r"^admin_login$"),
+                 CallbackQueryHandler(agent_login_prompt, pattern=r"^agent_login_prompt$"),
             ],
             
             ADMIN_MENU: [
                 # عرض المحلات/البحث
-                CallbackQueryHandler(show_and_search_shops, pattern="^show_shops_list$"), 
+                CallbackQueryHandler(show_and_search_shops, pattern=r"^show_shops_list$"), 
                 # إضافة محل وإدارة المجهزين
-                CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
+                CallbackQueryHandler(admin_menu_handler, pattern=r"^(add_shop|manage_agents|admin_menu)$"),
             ],
             
             SHOW_SHOPS_ADMIN: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_shop_search_handler),
                 
                 # أزرار الإدارة التي تظهر في نتائج البحث
-                CallbackQueryHandler(prompt_edit_shop_details, pattern="^edit_shop_select_\d+$"),
-                CallbackQueryHandler(confirm_shop_deletion, pattern="^delete_shop_confirm_\d+$"),
+                CallbackQueryHandler(prompt_edit_shop_details, pattern=r"^edit_shop_select_\d+$"),
+                CallbackQueryHandler(confirm_shop_deletion, pattern=r"^delete_shop_confirm_\d+$"),
                 
-                CallbackQueryHandler(show_admin_menu, pattern="^admin_menu$"), 
+                CallbackQueryHandler(show_admin_menu, pattern=r"^admin_menu$"), 
             ],
             
             ADD_SHOP_STATE: [
-                CallbackQueryHandler(show_admin_menu, pattern="^admin_menu$"),
+                CallbackQueryHandler(show_admin_menu, pattern=r"^admin_menu$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_shop_data),
             ],
             
             MANAGE_AGENT: [
                 # القائمة الرئيسية لإدارة المجهزين
-                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
+                CallbackQueryHandler(manage_agents_menu, pattern=r"^manage_agents$"), 
                 # إضافة مجهز جديد
-                CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
+                CallbackQueryHandler(add_new_agent_menu, pattern=r"^add_new_agent$"), 
                 # عرض المجهزين للاختيار
-                CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
+                CallbackQueryHandler(list_agents_menu, pattern=r"^list_agents$"), 
                 # قائمة المجهزين للحذف (تذهب إلى DELETE_AGENT_STATE)
-                CallbackQueryHandler(list_agents_to_delete, pattern="^delete_agent$"),
+                CallbackQueryHandler(list_agents_to_delete, pattern=r"^delete_agent$"),
                 # تعديل تفاصيل المجهز
-                CallbackQueryHandler(edit_agent_details_menu, pattern="^edit_details_\d+$"),
+                CallbackQueryHandler(edit_agent_details_menu, pattern=r"^edit_details_\d+$"),
                 # خيارات المجهز (ربط/تعديل/حذف)
-                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"),
                 # قائمة المحلات لربطها
-                CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
+                CallbackQueryHandler(list_shops_to_assign, pattern=r"^assign_shops_\d+$"),
             ],
             
             ADD_AGENT_STATE: [
-                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"),
+                CallbackQueryHandler(manage_agents_menu, pattern=r"^manage_agents$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_agent_data)
             ],
 
             SELECT_SHOPS: [
-                CallbackQueryHandler(handle_shop_assignment, pattern="^confirm_shop_assignment$"),
-                CallbackQueryHandler(toggle_shop_selection, pattern="^toggle_shop_\d+$"), 
-                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+                CallbackQueryHandler(handle_shop_assignment, pattern=r"^confirm_shop_assignment$"),
+                CallbackQueryHandler(toggle_shop_selection, pattern=r"^toggle_shop_\d+$"), 
+                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"),
             ],
 
             EDIT_AGENT_DETAILS: [
-                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"), 
+                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"), 
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details), 
             ],
             
             DELETE_SHOP_STATE: [
                 # تنفيذ الحذف يتم من داخل SHOW_SHOPS_ADMIN 
-                CallbackQueryHandler(show_and_search_shops, pattern="^show_shops_list$"), 
+                CallbackQueryHandler(show_and_search_shops, pattern=r"^show_shops_list$"), 
             ],
             
             DELETE_AGENT_STATE: [
-                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
-                CallbackQueryHandler(confirm_agent_deletion, pattern="^delete_agent_confirm_\d+$"),
+                CallbackQueryHandler(manage_agents_menu, pattern=r"^manage_agents$"), 
+                CallbackQueryHandler(confirm_agent_deletion, pattern=r"^delete_agent_confirm_\d+$"),
             ],
 
             EDIT_SHOP_STATE: [
-                CallbackQueryHandler(show_and_search_shops, pattern="^show_shops_list$"), 
-                CallbackQueryHandler(show_admin_menu, pattern="^admin_menu$"), 
-                CallbackQueryHandler(prompt_edit_shop_details, pattern="^edit_shop_select_\d+$"),
+                CallbackQueryHandler(show_and_search_shops, pattern=r"^show_shops_list$"), 
+                CallbackQueryHandler(show_admin_menu, pattern=r"^admin_menu$"), 
+                CallbackQueryHandler(prompt_edit_shop_details, pattern=r"^edit_shop_select_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_updated_shop_data),
             ],
             
             AGENT_LOGIN: [
-                CallbackQueryHandler(agent_login_prompt, pattern="^agent_login_prompt$"),
+                CallbackQueryHandler(agent_login_prompt, pattern=r"^agent_login_prompt$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, agent_login_receive_code),
-                CallbackQueryHandler(start_command, pattern="^start$"),
+                CallbackQueryHandler(start_command, pattern=r"^start$"),
                 CommandHandler("start", start_command), 
             ],
 
             AGENT_MENU: [
-                 CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"),
+                 CallbackQueryHandler(show_agent_shops_handler, pattern=r"^show_agent_shops$"),
                  MessageHandler(filters.TEXT & ~filters.COMMAND, agent_shop_search_handler),
-                 CallbackQueryHandler(show_agent_menu, pattern="^agent_menu_back$"), 
-                 CallbackQueryHandler(start_command, pattern="^start$"), 
+                 CallbackQueryHandler(show_agent_menu, pattern=r"^agent_menu_back$"), 
+                 CallbackQueryHandler(start_command, pattern=r"^start$"), 
                  CommandHandler("start", start_command), 
             ]
         },
