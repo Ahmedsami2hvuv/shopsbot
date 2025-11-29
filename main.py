@@ -119,8 +119,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is
     keyboard = [
         [InlineKeyboardButton("عرض المحلات (تعديل/حذف) 📊", callback_data="show_shops_list"), 
          InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop")], 
-        [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")],
-        [InlineKeyboardButton("تسجيل الخروج 🚪", callback_data="start")] 
+        [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")], 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -239,7 +238,7 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             
             keyboard.append([url_button])
             keyboard.append([edit_button, delete_button]) 
-            keyboard.append([InlineKeyboardButton("---", callback_data="ignore")])
+            keyboard.append([InlineKeyboardButton("------", callback_data="ignore")])
     
     else:
         if search_term:
@@ -383,7 +382,7 @@ async def show_and_manage_agents(update: Update, context: ContextTypes.DEFAULT_T
             agent_name = agent['name']
             
             # 1. زر المجهز كعنوان
-            keyboard.append([InlineKeyboardButton(f"👤 {agent_name}", callback_data="ignore")])
+            keyboard.append([InlineKeyboardButton(f"🧔🏻‍♂ {agent_name}", callback_data="ignore")])
             
             # 2. أزرار الإدارة المصغّرة (3 أزرار برموز تعبيرية فقط)
             assign_shops_btn = InlineKeyboardButton("➕🏬", callback_data=f"assign_shops_{agent_id}")
@@ -391,7 +390,7 @@ async def show_and_manage_agents(update: Update, context: ContextTypes.DEFAULT_T
             delete_btn = InlineKeyboardButton("🗑️", callback_data=f"delete_agent_confirm_{agent_id}") 
             
             keyboard.append([assign_shops_btn, edit_details_btn, delete_btn])
-            keyboard.append([InlineKeyboardButton("🟦🟦🟦", callback_data="ignore_2")]) 
+            keyboard.append([InlineKeyboardButton("------", callback_data="ignore_2")]) 
     
     else:
         text = "❌ لا يوجد مجهزون مُضافون حالياً. إضغط على الزر أعلاه للإضافة."
@@ -639,7 +638,6 @@ async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is
     
     keyboard = [
         [InlineKeyboardButton("عرض المحلات المخصصة 📊", callback_data="show_agent_shops")],
-        [InlineKeyboardButton("تسجيل الخروج 🚪", callback_data="start")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -687,7 +685,7 @@ async def show_agent_shops(update: Update, context: ContextTypes.DEFAULT_TYPE, s
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            url_button = InlineKeyboardButton(text=f"🔗 {shop['name']}", url=shop_url)
+            url_button = InlineKeyboardButton(text=f" {shop['name']}", url=shop_url)
             keyboard.append([url_button])
             keyboard.append([InlineKeyboardButton("---", callback_data="ignore")])
     
