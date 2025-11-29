@@ -286,26 +286,33 @@ async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يعرض خيارات التعديل لمجهز محدد."""
-    query = update.callback_query
-    await query.answer() # الرد على الضغطة
+    # ملاحظة: هذه الدالة تستقبل إما query أو message (من receive_new_agent_details)
+    
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer() # الرد على الضغطة
 
-    # استخدام الـ ID المخزن أو استخراجه
-    if query.data and query.data.startswith("select_agent_"):
-        agent_id = int(query.data.split('_')[-1])
-        context.user_data['selected_agent_id'] = agent_id 
+        # استخدام الـ ID المخزن أو استخراجه
+        if query.data and query.data.startswith("select_agent_"):
+            agent_id = int(query.data.split('_')[-1])
+            context.user_data['selected_agent_id'] = agent_id 
         
-        try:
-            assigned_ids = get_assigned_shop_ids(agent_id)
-            context.user_data['temp_assigned_shops'] = set(assigned_ids)
-        except Exception:
-            context.user_data['temp_assigned_shops'] = set() 
-
+            try:
+                assigned_ids = get_assigned_shop_ids(agent_id)
+                context.user_data['temp_assigned_shops'] = set(assigned_ids)
+            except Exception:
+                context.user_data['temp_assigned_shops'] = set() 
+    
     agent_id = context.user_data.get('selected_agent_id')
 
     if not agent_id:
-        await query.edit_message_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
-        return await manage_agents_menu(update, context)
-        
+        if update.callback_query:
+            await update.callback_query.edit_message_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
+            return await manage_agents_menu(update, context)
+        else:
+            await update.message.reply_text("❌ حدث خطأ، لم يتم تحديد المجهز.")
+            return MANAGE_AGENT # نعتمد على أن المجهز سيعيد الضغط على زر ما
+
     agent_name = get_agent_name_by_id(agent_id) 
     if not agent_name:
         agent_name = f"المجهز رقم {agent_id}"
@@ -319,16 +326,26 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        f"**إختر الإجراء المطلوب للمجهز {agent_name}:**",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
-        
+    text = f"**إختر الإجراء المطلوب للمجهز {agent_name}:**"
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    elif update.message:
+         # يتم الرد هنا عندما تكون العودة من رسالة نصية (مثل بعد تعديل التفاصيل)
+        await update.message.reply_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+
     return MANAGE_AGENT
 
 async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يطلب من المدير إرسال تفاصيل المجهز الجديدة (كإطار عمل)."""
+    """يطلب من المدير إرسال تفاصيل المجهز الجديدة."""
     query = update.callback_query
     await query.answer()
 
@@ -338,15 +355,16 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     
     agent_name = get_agent_name_by_id(agent_id) or "هذا المجهز"
 
+    # تم إضافة زر العودة لخيارات المجهز
     keyboard = [
-        [InlineKeyboardButton("🔙 إلغاء والعودة", callback_data=f"select_agent_{agent_id}")]
+        [InlineKeyboardButton("🔙 العودة لخيارات المجهز", callback_data=f"select_agent_{agent_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
         f"✏️ **تعديل تفاصيل المجهز {agent_name}:**\n"
         "إرسل الإسم الجديد للمجهز بالسطر الأول، ورمز الدخول السري الجديد بالسطر الثاني. \n"
-        "ملاحظة: هذه الميزة قيد التنفيذ، لن يتم حفظ التغييرات الآن.",
+        "ملاحظة: هذه الميزة قيد التنفيذ، ولن يتم حفظ التغييرات حالياً.", # تم تغيير النص قليلاً
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
@@ -354,46 +372,22 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     return EDIT_AGENT_DETAILS 
 
 async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل تفاصيل المجهز الجديدة ويحفظها (إطار عمل)."""
+    """يستقبل تفاصيل المجهز الجديدة ويتم توجيهه للعودة (إطار عمل)."""
     
     text = update.message.text.strip()
     parts = text.split('\n', 1) 
     agent_id = context.user_data.get('selected_agent_id')
 
-    # هنا يجب أن يتم منطق الحفظ والتحديث
+    # هنا يتم إهمال منطق الحفظ حالياً والتوجه مباشرة إلى العودة
     
-    # مؤقتاً: إرسال رسالة تأكيد (تم إرسالها) والعودة
+    # رسالة تأكيد مؤقتة والعودة مباشرة
     await update.message.reply_text(
-        f"✅ تم استلام تفاصيل المجهز رقم {agent_id}.\n"
-        "**منطق الحفظ قيد التنفيذ حالياً.**",
+        f"✅ تم استلام تفاصيل المجهز رقم {agent_id}. سيتم تحديث تفاصيله لاحقاً.",
         parse_mode="Markdown"
     )
     
-    # العودة إلى قائمة خيارات المجهز المحدد
-    # بما أننا نستخدم message.reply_text للرد، نحتاج إلى دالة تعيد عرض القائمة
-    return await select_agent_menu_from_message(update, context) 
-
-async def select_agent_menu_from_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """دالة مساعدة لمعالجة العودة إلى select_agent_menu من رسالة نصية."""
-    # بما أننا قمنا بالرد على رسالة، سنستخدم reply_text لعرض القائمة التالية
-    agent_id = context.user_data.get('selected_agent_id')
-    agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
-    
-    edit_details_callback = f"edit_details_{agent_id}" 
-
-    keyboard = [
-        [InlineKeyboardButton(f"إضافة محلات إلى {agent_name} 🏪", callback_data=f"assign_shops_{agent_id}")],
-        [InlineKeyboardButton(f"تعديل تفاصيل {agent_name} ✏️", callback_data=edit_details_callback)],
-        [InlineKeyboardButton("🔙 العودة لقائمة المجهزين", callback_data="list_agents")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        f"**إختر الإجراء المطلوب للمجهز {agent_name}:**",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
-    return MANAGE_AGENT
+    # العودة إلى قائمة خيارات المجهز المحدد باستخدام select_agent_menu
+    return await select_agent_menu(update, context) 
 
 
 async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -710,9 +704,10 @@ def main() -> None:
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
                 CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
                 
-                # المعالج الجديد لزر تعديل التفاصيل (الآن أصبح يعمل كإطار عمل)
+                # المعالج الجديد لزر تعديل التفاصيل
                 CallbackQueryHandler(edit_agent_details_menu, pattern="^edit_details_\d+$"), 
                 
+                # المعالجات الرئيسية لصفحة المجهز المحدد
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
                 CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
             ],
@@ -730,7 +725,7 @@ def main() -> None:
             ],
 
             EDIT_AGENT_DETAILS: [
-                # العودة من شاشة تعديل التفاصيل
+                # العودة من شاشة تعديل التفاصيل (الآن تعمل)
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details),
             ],
