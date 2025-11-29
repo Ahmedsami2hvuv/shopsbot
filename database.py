@@ -101,22 +101,29 @@ def get_all_shops():
 # ------------------------------------------------------------------------------------------------
 # الدالة المعدلة والنهائية: حذف المحل (لضمان إغلاق الاتصال والموثوقية)
 # ------------------------------------------------------------------------------------------------
+
 def delete_shop(shop_id: int) -> bool:
-    """يحذف محل من جدول Shops بواسطة الـ ID."""
-    conn = None
+    """
+    تقوم بحذف محل معين من جدول Shops.
+    ملاحظة: يجب أن تحذف جميع الروابط المرتبطة به في جدول AgentShops أولاً.
+    """
     try:
-        conn = connect_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Shops WHERE id = %s", (shop_id,))
-        conn.commit()
+        # 1. حذف جميع الروابط في AgentShops أولاً (لحل مشكلة Foreign Key)
+        execute_query(
+            "DELETE FROM AgentShops WHERE shop_id = %s",
+            (shop_id,)
+        )
+        
+        # 2. حذف المحل نفسه من جدول Shops
+        execute_query(
+            "DELETE FROM Shops WHERE id = %s",
+            (shop_id,)
+        )
         return True
     except Exception as e:
-        if conn: conn.rollback()
-        # تسجيل الخطأ لمعرفة سبب الفشل في السجلات
-        print(f"CRITICAL ERROR: Failed to delete shop ID {shop_id}. Database error: {e}") 
+        # يمكنك طباعة الخطأ للمراجعة في الـ logs
+        print(f"Error deleting shop: {e}") 
         return False
-    finally:
-        if conn: conn.close() # ضمان إغلاق الاتصال دائماً
 
 def add_agent(name: str, secret_code: str) -> bool:
     """يضيف مجهز جديد ويرجع True اذا نجحت العملية."""
