@@ -233,9 +233,9 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            url_button = InlineKeyboardButton(text=f"🔗 {shop['name']}", url=shop_url)
-            edit_button = InlineKeyboardButton("✏️ تعديل", callback_data=f"edit_shop_select_{shop['id']}")
-            delete_button = InlineKeyboardButton("🗑️ حذف", callback_data=f"delete_shop_confirm_{shop['id']}")
+            url_button = InlineKeyboardButton(text=f" {shop['name']}", url=shop_url)
+            edit_button = InlineKeyboardButton("✏️", callback_data=f"edit_shop_select_{shop['id']}")
+            delete_button = InlineKeyboardButton("🗑️", callback_data=f"delete_shop_confirm_{shop['id']}")
             
             keyboard.append([url_button])
             keyboard.append([edit_button, delete_button]) 
@@ -386,12 +386,12 @@ async def show_and_manage_agents(update: Update, context: ContextTypes.DEFAULT_T
             keyboard.append([InlineKeyboardButton(f"👤 {agent_name}", callback_data="ignore")])
             
             # 2. أزرار الإدارة المصغّرة (3 أزرار برموز تعبيرية فقط)
-            assign_shops_btn = InlineKeyboardButton("🔗🏬", callback_data=f"assign_shops_{agent_id}")
+            assign_shops_btn = InlineKeyboardButton("➕🏬", callback_data=f"assign_shops_{agent_id}")
             edit_details_btn = InlineKeyboardButton("✏️", callback_data=f"edit_details_{agent_id}")
             delete_btn = InlineKeyboardButton("🗑️", callback_data=f"delete_agent_confirm_{agent_id}") 
             
             keyboard.append([assign_shops_btn, edit_details_btn, delete_btn])
-            keyboard.append([InlineKeyboardButton("---", callback_data="ignore_2")]) 
+            keyboard.append([InlineKeyboardButton("🟦🟦🟦", callback_data="ignore_2")]) 
     
     else:
         text = "❌ لا يوجد مجهزون مُضافون حالياً. إضغط على الزر أعلاه للإضافة."
