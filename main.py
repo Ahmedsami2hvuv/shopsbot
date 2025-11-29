@@ -17,19 +17,20 @@ from database import (
     setup_db, 
     add_shop, 
     get_all_shops, 
-    update_shop_details,
-    delete_shop,
+    update_shop_details, # لتعديل تفاصيل المحل
+    delete_shop,         # لحذف المحل
     add_agent, 
     get_all_agents, 
     get_agent_name_by_id,
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
     check_agent_code,
-    update_agent_details,
-    delete_agent, 
-    # 👇🏼 تم تصحيح مكان الدالة وإضافة الفاصلة
-    get_agent_shops_by_search 
-) 
+    update_agent_details, # لتعديل تفاصيل المجهز
+    delete_agent,         # لحذف المجهز
+    # 👇🏼 الدوال الجديدة للبحث (مفصولة بفواصل)
+    get_agent_shops_by_search, 
+    get_shops_by_search # 👈🏼 البحث للمدير
+)
 
 # تعريف حالات المحادثة
 (
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تظهر قائمة خيارات المدير، وتُستخدم للرجوع من أي قائمة فرعية."""
     keyboard = [
-        [InlineKeyboardButton("عرض المحلات 📊", callback_data="show_shops_admin")],
+        # 💡 تم إزالة زر "عرض المحلات 📊" القديم
         [InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop"), 
          InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], 
         [InlineKeyboardButton("تعديل محل ✏️", callback_data="edit_shops")], 
@@ -73,19 +74,24 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    text = "👋🏼 أهلاً بك يا مدير! إختار شنو تريد تسوي:"
-    
+    # 💡 تم تحديث نص الإرشاد
+    text = (
+        "👋🏼 أهلاً بك يا مدير! إختار شنو تريد تسوي: \n\n"
+        "🔍 **للبحث:** إرسل إسم المحل (أو جزء منه) لعرضه فوراً كزر."
+    )
+
+    # ... (بقية الدالة تبقى كما هي للتعامل مع query و message)
     if update.callback_query:
         await update.callback_query.answer()
         try:
-             await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+             await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception:
              # في حال كان التعديل يحتاج إلى إرسال رسالة جديدة (خطأ Edit)
-             await update.callback_query.message.reply_text(text=text, reply_markup=reply_markup)
+             await update.callback_query.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
 
     elif update.message:
-        await update.message.reply_text(text=text, reply_markup=reply_markup)
-        
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+
     return ADMIN_MENU
 
 # ----------------------------------------------------------------------
@@ -561,22 +567,26 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     return EDIT_AGENT_DETAILS 
 
 async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل تفاصيل المجهز الجديدة ويحفظها."""
+    """يستقبل تفاصيل المجهز الجديدة ويحفظها، ويعيد الحالة إلى خيارات المجهز."""
     
     text = update.message.text.strip()
     parts = text.split('\n', 1) 
     agent_id = context.user_data.get('selected_agent_id')
 
+    # 1. التحقق من وجود ID المجهز
     if not agent_id:
         await update.message.reply_text("❌ حدث خطأ، لم يتم تحديد المجهز المطلوب تعديله.")
-        return await select_agent_menu(update, context) 
+        # نعود إلى القائمة الرئيسية للإدارة
+        return await manage_agents_menu(update, context) 
 
+    # 2. التحقق من صيغة الإدخال
     if len(parts) != 2:
         await update.message.reply_text(
             "❌ صيغة الإدخال خطأ. لازم تكون:\n"
             "الإسم الجديد للمجهز\n"
             "رمز الدخول السري الجديد"
         )
+        # نطلب إعادة الإدخال بالبقاء في نفس الحالة
         return EDIT_AGENT_DETAILS
 
     new_name = parts[0].strip()
@@ -584,6 +594,7 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
 
     result = update_agent_details(agent_id, new_name, new_code)
     
+    # 3. معالجة نتيجة التحديث
     if result is True:
         await update.message.reply_text(
             f"✅ تم تحديث بيانات المجهز بنجاح!\n"
@@ -593,7 +604,7 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
         )
     elif result == "CODE_EXISTS":
         keyboard = [
-            [InlineKeyboardButton("↩️ إعادة إدخال التفاصيل", callback_data=f"edit_details_{agent_id}")],
+            # زر الرجوع لخيارات المجهز ليتخذ قرارًا آخر
             [InlineKeyboardButton("🔙 العودة لخيارات المجهز", callback_data=f"select_agent_{agent_id}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -602,6 +613,7 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
+        # بما أن المشكلة في الرمز، نبقى في MANAGE_AGENT ونعرض القائمة
         return MANAGE_AGENT
 
     else:
@@ -609,7 +621,9 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
             "❌ حدث خطأ غير متوقع أثناء تحديث بيانات المجهز."
         )
 
-    return await select_agent_menu(update, context) 
+    # في حال النجاح أو الخطأ غير المتوقع، نعود إلى قائمة خيارات المجهز
+    await select_agent_menu(update, context)
+    return MANAGE_AGENT
 
 
 async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1011,10 +1025,43 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
     
     return AGENT_MENU
 
+async def admin_shop_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يستقبل نص البحث من المدير ويعرض المحلات المطابقة كأزرار Web View."""
 
-# ----------------------------------------------------------------------
-# الدالة الرئيسية للتشغيل
-# ----------------------------------------------------------------------
+    search_term = update.message.text.strip()
+
+    if not search_term:
+        await update.message.reply_text("❌ لم يتم إدخال نص للبحث.")
+        return ADMIN_MENU
+
+    shops = get_shops_by_search(search_term)
+
+    keyboard = []
+
+    if shops:
+        text = f"✅ **نتائج البحث عن '{search_term}'** (إضغط لفتح نافذة الطلبات):"
+        for shop in shops:
+            shop_url = shop['url']
+            # للتأكد من أن الرابط يبدأ بـ https://
+            if not shop_url.lower().startswith(('http://', 'https://')):
+                 shop_url = "https://" + shop_url 
+
+            button = InlineKeyboardButton(f"🔗 {shop['name']}", url=shop_url)
+            keyboard.append([button])
+    else:
+        text = f"❌ لم يتم العثور على محلات مطابقة لـ '{search_term}'."
+
+    keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة", callback_data="admin_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+    return ADMIN_MENU
+
 
 # ----------------------------------------------------------------------
 # الدالة الرئيسية للتشغيل
@@ -1042,11 +1089,14 @@ def main() -> None:
         
         states={
             ADMIN_MENU: [
-                CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
-                CallbackQueryHandler(list_shops_to_delete, pattern="^delete_shop$"),
-                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
-                CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
-            ],
+    # 💡 إضافة معالج الرسائل النصية هنا لغرض البحث
+    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_shop_search_handler),
+
+    # 💡 تم إزالة CallbackQueryHandler(show_shops_admin_handler, ...)
+    CallbackQueryHandler(list_shops_to_delete, pattern="^delete_shop$"),
+    CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
+    CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
+],
             
             ADD_SHOP_STATE: [
                 CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"),
