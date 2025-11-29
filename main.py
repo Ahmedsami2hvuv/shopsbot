@@ -143,14 +143,14 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # دوال عرض المحلات (Show Shops State)
 # ----------------------------------------------------------------------
 
+
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع معالجة الأخطاء)."""
     
     query = update.callback_query
     
-    # 1. الرد الفوري على الضغطة لمنع الصمت، مع رسالة قصيرة
+    # 1. الرد الفوري على الضغطة لمنع الصمت
     try:
-        # إذا كان الزر صامتاً، فهذا الرد قد يكون فشل (لكنه ضروري للمحاولة)
         await query.answer("⏳ جاري جلب المحلات...") 
     except Exception:
         pass # نتجاهل خطأ الرد ونكمل
@@ -163,31 +163,37 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         logger.error(f"Error fetching shops for admin: {e}")
         
-        # رسالة خطأ واضحة للمدير
-        text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات. تأكد من أن PostgreSQL يعمل."
+        text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات."
         keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # محاولة التعديل أو إرسال رسالة جديدة (الحل الجذري للصمت)
         try:
             await query.edit_message_text(text=text, reply_markup=reply_markup)
-        except Exception as edit_e:
-            logger.error(f"Failed to edit message with DB error, sending new one: {edit_e}")
+        except Exception:
             await update.effective_message.reply_text(text=text, reply_markup=reply_markup)
             
         return ADMIN_MENU 
 
     keyboard = []
     
-    # 3. بناء القائمة النهائية في حال نجاح الجلب
+    # 3. بناء القائمة النهائية
     if shops:
         text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**"
         current_row = []
         for i, shop in enumerate(shops):
-            # التأكد من استخدام WebAppInfo لفتح الويب فيو
+            
+            # 💡 التعديل الأهم هنا: إضافة فحص بسيط لـ URL
+            shop_url = shop['url']
+            
+            # التأكد من أن الرابط يبدأ بـ http (ضروري لـ WebAppInfo)
+            if not shop_url.lower().startswith(('http://', 'https://')):
+                 # يمكن وضع رابط افتراضي لمنع الفشل إذا كان الرابط غير صحيح
+                 shop_url = "https://t.me/telegram" # رابط افتراضي لتجنب الفشل
+                 logger.warning(f"Shop URL for {shop['name']} is invalid: {shop['url']}. Using default URL.")
+            
             button = InlineKeyboardButton(
                 text=shop['name'], 
-                web_app=WebAppInfo(url=shop['url'])
+                web_app=WebAppInfo(url=shop_url)
             )
             current_row.append(button)
             
@@ -197,14 +203,14 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
                 current_row = []
     
     else:
-        text = "❌ لا توجد محلات مُضافة حالياً."
+        text = "❌ لا توجد محلات مُضافة حالياً.\nالرجاء الضغط على الزر أدناه لإضافة أول محل."
         keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
 
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # 4. محاولة تعديل الرسالة، وفي حال الفشل إرسال رسالة جديدة (هذا هو الحل الأقوى)
+    # 4. محاولة تعديل الرسالة، وفي حال الفشل إرسال رسالة جديدة
     try:
         await query.edit_message_text(
             text=text, 
@@ -212,16 +218,16 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown" 
         )
     except Exception as e:
-         # 5. في حال فشل التعديل الصامت، إرسال رسالة جديدة (حل جذري)
+         # 5. في حال فشل التعديل، إرسال رسالة جديدة كحل أخير ومؤكد
          logger.error(f"Failed to edit message, sending new one: {e}")
-         # نستخدم effective_message للرد على الرسالة الأصلية
          await update.effective_message.reply_text(
-            text="⚠️ فشل تحديث الرسالة. إليك قائمة المحلات:\n" + text, 
+            text="⚠️ لم يتمكن البوت من تحديث الرسالة. إليك المحتوى المطلوب:\n" + text, 
             reply_markup=reply_markup,
             parse_mode="Markdown" 
          )
     
     return ADMIN_MENU
+
 
 
 # ----------------------------------------------------------------------
