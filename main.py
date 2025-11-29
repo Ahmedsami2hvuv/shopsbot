@@ -115,10 +115,9 @@ async def admin_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is_command: bool = False) -> int:
     """تظهر قائمة خيارات المدير، وتُستخدم للرجوع من أي قائمة فرعية."""
     
-    # 🚨 تم تبسيط الأزرار
+    # 🚨 تم تعديل الأزرار: إضافة المحل نُقلت إلى داخل قائمة المحلات
     keyboard = [
-        [InlineKeyboardButton("عرض المحلات (تعديل/حذف) 📊", callback_data="show_shops_list"), 
-         InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop")], 
+        [InlineKeyboardButton("عرض المحلات (تعديل/حذف) 📊", callback_data="show_shops_list")], 
         [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")], 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -232,6 +231,7 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
+            # ملاحظة: تم إزالة رمز 🔗 من الزر ليتوافق مع تعديلك الأخير
             url_button = InlineKeyboardButton(text=f" {shop['name']}", url=shop_url)
             edit_button = InlineKeyboardButton("✏️", callback_data=f"edit_shop_select_{shop['id']}")
             delete_button = InlineKeyboardButton("🗑️", callback_data=f"delete_shop_confirm_{shop['id']}")
@@ -245,7 +245,10 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             text = f"❌ لا توجد محلات مطابقة لـ '{search_term}'."
         else:
             text = "❌ لا توجد محلات مُضافة حالياً."
-            keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
+            # تم إزالة زر الإضافة من هنا ليتم وضعه في نهاية القائمة دائماً
+
+    # 💡 زر "إضافة محل جديد" تم نقله ليصبح في نهاية القائمة دائماً (حسب طلبك)
+    keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
 
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
 
