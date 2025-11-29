@@ -144,13 +144,25 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مع معالجة الأخطاء)."""
     
     query = update.callback_query
     await query.answer() 
 
-    shops = get_all_shops()
-    
+    shops = []
+    try:
+        # محاولة جلب البيانات. إذا فشلت، سيتم الانتقال لـ except
+        shops = get_all_shops() 
+    except Exception as e:
+        logger.error(f"Error fetching shops for admin: {e}")
+        
+        # رسالة خطأ واضحة للمدير
+        text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات. تأكد من أن PostgreSQL يعمل."
+        keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        return ADMIN_MENU # العودة لقائمة الإدارة
+
     keyboard = []
     
     if shops:
@@ -185,6 +197,7 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     )
     
     return ADMIN_MENU
+
 
 # ----------------------------------------------------------------------
 # دوال إضافة محل (Add Shop State)
