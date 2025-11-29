@@ -13,7 +13,8 @@ from telegram.ext import (
 )
 # استدعاء كل الدوال من database.py
 
-from database import setup_db, add_shop, get_all_shops, add_agent, get_all_agents
+from database import setup_db, add_shop, get_all_shops, add_agent, get_all_agents, get_agent_name_by_id
+
 
 # تعريف حالات المحادثة
 (
