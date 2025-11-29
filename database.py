@@ -192,3 +192,32 @@ def check_agent_code(agent_code: str):
         return agent # ترجع قاموس أو None
     except Exception:
         return None
+
+# ------------------------------------------------------------------------------------------------
+# الدالة الجديدة: تحديث تفاصيل المجهز
+# ------------------------------------------------------------------------------------------------
+def update_agent_details(agent_id, new_name, new_code):
+    """تحديث اسم ورمز الدخول لمجهز محدد بواسطة ID."""
+    
+    # استعلام للتحقق من أن الرمز الجديد غير مستخدم من قبل مجهز آخر
+    check_query = """
+        SELECT id FROM Agents WHERE secret_code = %s AND id != %s
+    """
+    # استعلام لتحديث الاسم والرمز
+    update_query = """
+        UPDATE Agents 
+        SET name = %s, secret_code = %s 
+        WHERE id = %s
+    """
+    try:
+        # 1. التحقق من الرمز
+        existing_agent = execute_query(check_query, (new_code, agent_id), fetch_one=True)
+        if existing_agent:
+            return "CODE_EXISTS" # رمز الدخول مستخدم بالفعل
+            
+        # 2. تنفيذ التحديث
+        execute_query(update_query, (new_name, new_code, agent_id))
+        return True
+    except Exception as e:
+        print(f"Database error in update_agent_details: {e}")
+        return False
