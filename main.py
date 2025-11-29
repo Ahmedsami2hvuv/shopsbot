@@ -21,7 +21,8 @@ from database import (
     get_agent_name_by_id,
     get_assigned_shop_ids, 
     toggle_agent_shop_assignment,
-    check_agent_code
+    check_agent_code,
+    update_agent_details # <<< تم إضافة دالة التحديث
 ) 
 
 # تعريف حالات المحادثة
@@ -364,7 +365,7 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(
         f"✏️ **تعديل تفاصيل المجهز {agent_name}:**\n"
         "إرسل الإسم الجديد للمجهز بالسطر الأول، ورمز الدخول السري الجديد بالسطر الثاني. \n"
-        "ملاحظة: هذه الميزة قيد التنفيذ، ولن يتم حفظ التغييرات حالياً.", # تم تغيير النص قليلاً
+        "سيتم حفظ التغييرات عند الإرسال.", # <<< تم إزالة الرسالة المؤقتة
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
@@ -372,21 +373,50 @@ async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_
     return EDIT_AGENT_DETAILS 
 
 async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل تفاصيل المجهز الجديدة ويتم توجيهه للعودة (إطار عمل)."""
+    """يستقبل تفاصيل المجهز الجديدة ويحفظها."""
     
     text = update.message.text.strip()
     parts = text.split('\n', 1) 
     agent_id = context.user_data.get('selected_agent_id')
 
-    # هنا يتم إهمال منطق الحفظ حالياً والتوجه مباشرة إلى العودة
+    if not agent_id:
+        await update.message.reply_text("❌ حدث خطأ، لم يتم تحديد المجهز المطلوب تعديله.")
+        # العودة إلى قائمة خيارات المجهز المحدد
+        return await select_agent_menu(update, context) 
+
+    if len(parts) != 2:
+        await update.message.reply_text(
+            "❌ صيغة الإدخال خطأ. لازم تكون:\n"
+            "الإسم الجديد للمجهز\n"
+            "رمز الدخول السري الجديد"
+        )
+        return EDIT_AGENT_DETAILS
+
+    new_name = parts[0].strip()
+    new_code = parts[1].strip()
+
+    # *** منطق الحفظ الفعلي ***
+    result = update_agent_details(agent_id, new_name, new_code)
     
-    # رسالة تأكيد مؤقتة والعودة مباشرة
-    await update.message.reply_text(
-        f"✅ تم استلام تفاصيل المجهز رقم {agent_id}. سيتم تحديث تفاصيله لاحقاً.",
-        parse_mode="Markdown"
-    )
-    
-    # العودة إلى قائمة خيارات المجهز المحدد باستخدام select_agent_menu
+    if result is True:
+        await update.message.reply_text(
+            f"✅ تم تحديث بيانات المجهز بنجاح!\n"
+            f"الإسم الجديد: **{new_name}**\n"
+            f"الرمز الجديد: **{new_code}**",
+            parse_mode="Markdown"
+        )
+    elif result == "CODE_EXISTS":
+        await update.message.reply_text(
+            "❌ فشل التحديث: رمز الدخول السري **مستخدم بالفعل** من قبل مجهز آخر. الرجاء إدخال رمز آخر.",
+            parse_mode="Markdown"
+        )
+        return EDIT_AGENT_DETAILS
+    else:
+        await update.message.reply_text(
+            "❌ حدث خطأ غير متوقع أثناء تحديث بيانات المجهز."
+        )
+
+    # العودة إلى قائمة خيارات المجهز المحدد
     return await select_agent_menu(update, context) 
 
 
@@ -725,9 +755,9 @@ def main() -> None:
             ],
 
             EDIT_AGENT_DETAILS: [
-                # العودة من شاشة تعديل التفاصيل (الآن تعمل)
+                # العودة من شاشة تعديل التفاصيل
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details), # دالة الحفظ الفعلية
             ],
             
             AGENT_LOGIN: [
