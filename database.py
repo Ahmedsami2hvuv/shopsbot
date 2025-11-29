@@ -271,4 +271,28 @@ def get_agent_shops_by_search(agent_id: int, search_term: str):
         # يمكنك إضافة طباعة الخطأ للتتبع
         # logger.error(f"DB Error in get_agent_shops_by_search: {e}")
         return []
+
+# ------------------------------------------------------------------------------------------------
+# الدالة الجديدة: جلب المحلات بناءً على البحث (للمدير)
+# ------------------------------------------------------------------------------------------------
+def get_shops_by_search(search_term: str):
+    """
+    تجلب المحلات التي يتطابق اسمها جزئياً مع نص البحث للمدير.
+    """
+    try:
+        # استخدام ILIKE للبحث الجزئي دون الاهتمام بحالة الأحرف
+        query = """
+            SELECT id, name, url 
+            FROM Shops 
+            WHERE name ILIKE %s
+            ORDER BY name
+        """
+        # إضافة علامات النسبة المئوية حول مصطلح البحث
+        search_pattern = f"%{search_term}%" 
         
+        results = execute_query(query, (search_pattern,), fetch_all=True)
+        
+        return results if results else []
+    except Exception as e:
+        # logger.error(f"DB Error in get_shops_by_search: {e}")
+        return []
