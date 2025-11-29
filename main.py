@@ -34,7 +34,7 @@ from database import (
     AGENT_MENU,         
     MANAGE_AGENT,       
     SELECT_SHOPS,
-    EDIT_AGENT_DETAILS # حالة جديدة لتعديل التفاصيل
+    EDIT_AGENT_DETAILS 
 ) = range(9)
 
 # تعريف الـ Admin IDs (الناس اللي عدها صلاحية الإدارة)
@@ -89,7 +89,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # استخدام update.effective_message للرد
         effective_message = update.effective_message
         
         if update.callback_query:
@@ -144,7 +143,7 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (مراجعة قاطعة)."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (تم التأكيد على WebAppInfo)."""
     
     query = update.callback_query
     await query.answer() 
@@ -154,10 +153,10 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     keyboard = []
     
     if shops:
-        text = "📊 **إختر المحل لرفع الطلبية:**"
+        text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**"
         current_row = []
         for i, shop in enumerate(shops):
-            # التأكد من وجود web_app لإنشاء الزر
+            # التأكد من استخدام WebAppInfo لفتح الويب فيو
             button = InlineKeyboardButton(
                 text=shop['name'], 
                 web_app=WebAppInfo(url=shop['url'])
@@ -177,6 +176,7 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # يجب أن يتم هنا تعديل الرسالة التي ضغط منها الزر (query)
     await query.edit_message_text(
         text=text, 
         reply_markup=reply_markup,
@@ -310,11 +310,11 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not agent_name:
         agent_name = f"المجهز رقم {agent_id}"
     
-    edit_details_callback = f"edit_details_{agent_id}" # تم تعديل الـ callback
+    edit_details_callback = f"edit_details_{agent_id}" 
 
     keyboard = [
         [InlineKeyboardButton(f"إضافة محلات إلى {agent_name} 🏪", callback_data=f"assign_shops_{agent_id}")],
-        [InlineKeyboardButton(f"تعديل تفاصيل {agent_name} ✏️", callback_data=edit_details_callback)], # تم إزالة (قريباً)
+        [InlineKeyboardButton(f"تعديل تفاصيل {agent_name} ✏️", callback_data=edit_details_callback)],
         [InlineKeyboardButton("🔙 العودة لقائمة المجهزين", callback_data="list_agents")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -370,12 +370,12 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
     )
     
     # العودة إلى قائمة خيارات المجهز المحدد
-    return await select_agent_menu(update, context, called_from_message=True) 
+    # بما أننا نستخدم message.reply_text للرد، نحتاج إلى دالة تعيد عرض القائمة
+    return await select_agent_menu_from_message(update, context) 
 
-# إضافة دالة مساعدة لـ select_agent_menu
-async def select_agent_menu_from_message(update: Update, context: ContextTypes.DEFAULT_TYPE, **kwargs) -> int:
+async def select_agent_menu_from_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """دالة مساعدة لمعالجة العودة إلى select_agent_menu من رسالة نصية."""
-    # بما أننا قمنا بتمرير called_from_message=True، سنستخدم reply_text
+    # بما أننا قمنا بالرد على رسالة، سنستخدم reply_text لعرض القائمة التالية
     agent_id = context.user_data.get('selected_agent_id')
     agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
     
@@ -611,7 +611,6 @@ async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     agent_name = get_agent_name_by_id(context.user_data.get('current_agent_id')) or "عزيزي المجهز"
     
-    # تم تغيير "عرض طلباتي" إلى "عرض محلاتي"
     keyboard = [
         [InlineKeyboardButton("🏪 عرض محلاتي", callback_data="show_agent_shops")],
         [InlineKeyboardButton("🚪 تسجيل خروج", callback_data="start")],
@@ -637,29 +636,36 @@ async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return AGENT_MENU
 
 async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """عرض المحلات المخصصة للمجهز (إطار عمل)."""
+    """عرض المحلات المخصصة للمجهز (تم التأكيد على WebAppInfo)."""
     query = update.callback_query
+    await query.answer()
     
-    # هنا يجب جلب المحلات المربوطة بهذا المجهز
     agent_id = context.user_data.get('current_agent_id')
     assigned_shop_ids = get_assigned_shop_ids(agent_id)
     
     shops = get_all_shops()
+    # جلب المحلات المربوطة فقط
     agent_shops = [shop for shop in shops if shop['id'] in assigned_shop_ids]
 
     keyboard = []
     
     if agent_shops:
-        text = "**🏪 المحلات المتاحة لك:**"
-        for shop in agent_shops:
-            keyboard.append([InlineKeyboardButton(shop['name'], web_app=WebAppInfo(url=shop['url']))])
+        text = "**🏪 المحلات المتاحة لك لرفع الطلبات (Web View):**"
+        current_row = []
+        for i, shop in enumerate(agent_shops):
+            # *** هنا يكمن الحل! استخدام WebAppInfo لفتح الويب فيو ***
+            button = InlineKeyboardButton(shop['name'], web_app=WebAppInfo(url=shop['url']))
+            current_row.append(button)
+            
+            if len(current_row) == 2 or i == len(agent_shops) - 1: # نضع زرين في الصف
+                keyboard.append(current_row)
+                current_row = []
     else:
         text = "❌ لا توجد محلات مربوطة بحسابك حالياً."
 
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة", callback_data="agent_menu_back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.answer()
     await query.edit_message_text(
         text=text,
         reply_markup=reply_markup,
@@ -704,7 +710,7 @@ def main() -> None:
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
                 CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
                 
-                # المعالج الجديد لزر تعديل التفاصيل (الآن أصبح يعمل)
+                # المعالج الجديد لزر تعديل التفاصيل (الآن أصبح يعمل كإطار عمل)
                 CallbackQueryHandler(edit_agent_details_menu, pattern="^edit_details_\d+$"), 
                 
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
@@ -737,7 +743,7 @@ def main() -> None:
             ],
 
             AGENT_MENU: [
-                 CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"), # عرض المحلات
+                 CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"), # عرض المحلات (للمجهز)
                  CallbackQueryHandler(show_agent_menu, pattern="^agent_menu_back$"), # للعودة من عرض المحلات
                  CallbackQueryHandler(start_command, pattern="^start$"), # تسجيل خروج
                  CommandHandler("start", start_command), 
