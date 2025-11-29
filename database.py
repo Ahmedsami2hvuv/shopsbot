@@ -115,7 +115,7 @@ def update_shop_details(shop_id, new_name, new_url):
     return execute_query(query, (new_name, new_url, shop_id))
 
 def delete_shop(shop_id):
-    """حذف محل محدد بواسطة ID وحذف كل ارتباطاته بالمجهزين. 👈🏼 تم الإضافة"""
+    """حذف محل محدد بواسطة ID وحذف كل ارتباطاته بالمجهزين."""
     try:
         # 1. حذف ارتباطات المجهزين أولاً (AgentShops)
         delete_assignments_query = "DELETE FROM AgentShops WHERE shop_id = %s"
@@ -176,8 +176,13 @@ def update_agent_details(agent_id, new_name, new_code):
         logger.error(f"Error updating agent details: {e}")
         return False
 
-def delete_agent(agent_id):
-    """حذف مجهز محدد بواسطة ID وحذف كل ارتباطاته بالمحلات. 👈🏼 تم الإضافة"""
+# 🚨 التعديل الذي يمنع خطأ TypeError
+def delete_agent(agent_id=None):
+    """حذف مجهز محدد بواسطة ID وحذف كل ارتباطاته بالمحلات."""
+    # منع الخطأ إذا تم استدعاء الدالة بدون ID
+    if agent_id is None:
+        return False
+        
     try:
         # 1. حذف ارتباطات المحلات أولاً (AgentShops)
         delete_assignments_query = "DELETE FROM AgentShops WHERE agent_id = %s"
