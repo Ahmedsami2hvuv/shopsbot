@@ -106,6 +106,19 @@ def get_all_shops():
     """يجلب قائمة بكل المحلات المخزنة."""
     return execute_query("SELECT id, name, url FROM Shops ORDER BY name", fetch_all=True)
 
+# ------------------------------------------------------------------------------------------------
+# الدالة الجديدة: حذف المحل
+# ------------------------------------------------------------------------------------------------
+def delete_shop(shop_id: int) -> bool:
+    """يحذف محل من جدول Shops بواسطة الـ ID."""
+    try:
+        # PostgreSQL سيحذف أيضاً المدخلات المرتبطة في AgentShops بسبب ON DELETE CASCADE
+        execute_query("DELETE FROM Shops WHERE id = %s", (shop_id,))
+        return True
+    except Exception:
+        return False
+# ------------------------------------------------------------------------------------------------
+
 # تعديل دالة إضافة مجهز
 def add_agent(name: str, secret_code: str) -> bool:
     """يضيف مجهز جديد ويرجع True اذا نجحت العملية."""
