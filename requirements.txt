@@ -1,3 +1,6 @@
-python-telegram-bot
-psycopg2-binary
+# المكتبات المطلوبة لتشغيل البوت
+# 🚨 هذا السطر يحل مشكلة RuntimeError الخاصة بالـ Webhook
+python-telegram-bot[webhooks]
 
+# مكتبة الاتصال بقاعدة بيانات PostgreSQL
+psycopg2-binary
