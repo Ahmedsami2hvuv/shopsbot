@@ -12,6 +12,7 @@ from telegram.ext import (
     filters
 )
 # استدعاء كل الدوال اللازمة من database.py 
+# يجب أن تحتوي نسخة الـ database.py لديك على دوال: update_agent_details و delete_shop
 from database import (
     setup_db, 
     add_shop, 
@@ -23,7 +24,7 @@ from database import (
     toggle_agent_shop_assignment,
     check_agent_code,
     update_agent_details,
-    delete_shop 
+    delete_shop # يجب أن تكون موجودة في ملف database.py
 ) 
 
 # تعريف حالات المحادثة
@@ -37,7 +38,7 @@ from database import (
     MANAGE_AGENT,       
     SELECT_SHOPS,
     EDIT_AGENT_DETAILS,
-    DELETE_SHOP_STATE 
+    DELETE_SHOP_STATE # حالة جديدة
 ) = range(10) 
 
 # تعريف الـ Admin IDs (الناس اللي عدها صلاحية الإدارة)
@@ -60,7 +61,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = [
         [InlineKeyboardButton("عرض المحلات 📊", callback_data="show_shops_admin")],
         [InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop"), 
-         InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], 
+         InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], # تم تحديثها
         [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -69,7 +70,12 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+        try:
+             await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+        except:
+             # في حال كان التعديل يحتاج إلى إرسال رسالة جديدة
+             await update.callback_query.message.reply_text(text=text, reply_markup=reply_markup)
+
     elif update.message:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
         
@@ -139,7 +145,7 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ADMIN_MENU
 
 # ----------------------------------------------------------------------
-# دوال عرض المحلات (Show Shops State) - تم إصلاح مشكلة الرابط
+# دوال عرض المحلات (Show Shops State) 
 # ----------------------------------------------------------------------
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -173,7 +179,7 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            # 🟢 التعديل: استخدام 'url' مباشرة لفتح الرابط وإظهار تأكيد "الرابط"
+            # 🟢 استخدام 'url' مباشرة لفتح الرابط وإظهار تأكيد "الرابط"
             button = InlineKeyboardButton(
                 text=f"🔗 {shop['name']}", 
                 url=shop_url
@@ -287,7 +293,9 @@ async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     try:
+        # استخلاص الـ ID من الـ callback_data
         shop_id = int(query.data.split('_')[-1])
+        # نحتاج لجلب الاسم قبل الحذف لطباعته في رسالة التأكيد
         shops = get_all_shops()
         shop_name = next((shop['name'] for shop in shops if shop['id'] == shop_id), f"المحل رقم {shop_id}")
         
@@ -295,7 +303,8 @@ async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("❌ حدث خطأ في تحديد المحل.")
         return await show_admin_menu(update, context)
 
-    if delete_shop(shop_id):
+    # 🚨 استخدام دالة delete_shop التي يجب أن تكون مُعدلة في database.py
+    if delete_shop(shop_id): 
         await query.edit_message_text(f"✅ تم حذف المحل **{shop_name}** بنجاح!")
     else:
         await query.edit_message_text("❌ فشل حذف المحل. تأكد من اتصال قاعدة البيانات.")
@@ -364,17 +373,27 @@ async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if update.callback_query:
         query = update.callback_query
-        await query.answer()
-
-        if query.data and query.data.startswith("select_agent_"):
-            agent_id = int(query.data.split('_')[-1])
-            context.user_data['selected_agent_id'] = agent_id 
-        
+        # نتحقق من الـ data اللي جاية بالـ callback
+        if query.data and query.data.startswith(("select_agent_", "edit_details_")):
+            # نستخدم الـ ID الموجود بنهاية الـ data
             try:
-                assigned_ids = get_assigned_shop_ids(agent_id)
-                context.user_data['temp_assigned_shops'] = set(assigned_ids)
-            except Exception:
-                context.user_data['temp_assigned_shops'] = set() 
+                agent_id = int(query.data.split('_')[-1])
+                context.user_data['selected_agent_id'] = agent_id 
+            except ValueError:
+                # إذا لم يكن الـ ID رقم
+                pass
+        
+            agent_id = context.user_data.get('selected_agent_id')
+
+            if agent_id:
+                # تحديث المحلات المعينة المؤقتة عند دخول القائمة
+                try:
+                    assigned_ids = get_assigned_shop_ids(agent_id)
+                    context.user_data['temp_assigned_shops'] = set(assigned_ids)
+                except Exception:
+                    context.user_data['temp_assigned_shops'] = set() 
+            
+            await query.answer()
     
     agent_id = context.user_data.get('selected_agent_id')
 
@@ -495,7 +514,7 @@ async def receive_new_agent_details(update: Update, context: ContextTypes.DEFAUL
 
 
 async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """تعرض قائمة المحلات لربطها بالمجهز وتظهر علامة ✅."""
+    """تعرض قائمة المحلات لربطها بالمجهز وتظهر علامة ✅، مرتبة حسب التعيين أولاً."""
     query = update.callback_query
     await query.answer()
 
@@ -506,7 +525,16 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
     shops = get_all_shops()
     agent_name = get_agent_name_by_id(agent_id) or f"المجهز رقم {agent_id}"
     
+    # المحلات المحددة مؤقتاً في هذه الجلسة
     selected_shops = context.user_data.get('temp_assigned_shops', set())
+
+    # 🟢 التعديل: تطبيق الترتيب المطلوب (المحلات المربوطة أولاً، ثم الباقي، والكل مرتب حسب الاسم)
+    def sort_shops_key(shop):
+        # 0 if assigned (comes first), 1 if not assigned (comes later)
+        is_assigned_flag = 0 if shop['id'] in selected_shops else 1
+        return (is_assigned_flag, shop['name']) # Sort by assignment status, then by name
+    
+    shops.sort(key=sort_shops_key) 
 
     keyboard = []
     
@@ -535,7 +563,8 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await query.edit_message_text(
         f"🏪 **ربط محلات بالمجهز {agent_name}:**\n\n"
-        "إختر المحلات التي سيتم إتاحتها لهذا المجهز. اضغط على 'تأكيد وحفظ الربط' لتطبيق التغييرات.",
+        "إختر المحلات التي سيتم إتاحتها لهذا المجهز. المحلات المربوطة حالياً تظهر أولاً.\n\n"
+        "اضغط على 'تأكيد وحفظ الربط' لتطبيق التغييرات.",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
@@ -755,7 +784,7 @@ async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return AGENT_MENU
 
 async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """عرض المحلات المخصصة للمجهز (باستخدام URL لفتح كـ Web View)."""
+    """عرض المحلات المخصصة للمجهز (باستخدام URL لفتح كـ Web View)، مرتبة أبجدياً."""
     query = update.callback_query
     await query.answer()
     
@@ -764,6 +793,9 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
     
     shops = get_all_shops()
     agent_shops = [shop for shop in shops if shop['id'] in assigned_shop_ids]
+
+    # يتم فرز محلات المجهز أبجدياً بالاسم (ما لم يتم تطبيق ترتيب "الأكثر استخداماً" في المستقبل)
+    agent_shops.sort(key=lambda shop: shop['name'])
 
     keyboard = []
     
@@ -775,7 +807,7 @@ async def show_agent_shops_handler(update: Update, context: ContextTypes.DEFAULT
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
 
-            # 🟢 التعديل: استخدام 'url' مباشرة بدلاً من WebAppInfo
+            # 🟢 استخدام 'url' مباشرة بدلاً من WebAppInfo
             button = InlineKeyboardButton(f"🔗 {shop['name']}", url=shop_url)
             keyboard.append([button])
     else:
