@@ -143,10 +143,9 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # دوال عرض المحلات (Show Shops State)
 # ----------------------------------------------------------------------
 
-# في ملف main (1) (8).py
 
 async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (بإرسال رسالة جديدة)."""
+    """يجلب المحلات ويعرضها على شكل ازرار WebApp للأدمن (بإرسال رسالة جديدة - الحل النهائي)."""
     
     query = update.callback_query
     
@@ -164,16 +163,15 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         logger.error(f"Error fetching shops for admin: {e}")
         text = "❌ حدث خطأ في قاعدة البيانات أثناء جلب المحلات."
-        
-        # نستخدم reply_text هنا بدلاً من edit_message_text لتجنب الفشل
         await update.effective_message.reply_text(text=text)
         return ADMIN_MENU 
 
     keyboard = []
     
-    # 3. بناء قائمة الأزرار بالـ WebApp (هذا ما تريده بالضبط)
+    # 3. بناء قائمة الأزرار بالـ WebApp
     if shops:
-        text = "📊 **إختر المحل لفتح نافذة الطلبات (Web App):**" 
+        # 🟢 نستخدم تنسيق عادي هنا لتجنب التعارض (سنزيل Markdown في خطوة الإرسال)
+        text = "📊 إختر المحل لفتح نافذة الطلبات (Web App):" 
         current_row = []
         for i, shop in enumerate(shops):
             
@@ -183,7 +181,6 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            # الزر الذي يفتح WebApp
             button = InlineKeyboardButton(
                 text=shop['name'], 
                 web_app=WebAppInfo(url=shop_url)
@@ -195,17 +192,16 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
                 current_row = []
     
     else:
-        text = "❌ لا توجد محلات مُضافة حالياً.\nالرجاء الضغط على الزر أدناه لإضافة أول محل."
+        text = "❌ لا توجد محلات مُضافة حالياً. الرجاء الضغط على الزر أدناه لإضافة أول محل."
         keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
 
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # 4. 🚀 الحل النهائي: إرسال رسالة جديدة بدلاً من تعديل الرسالة القديمة 🚀
-    # هذا يحل المشكلة نهائياً حيث أن تعديل رسالة بأزرار WebApp هو ما كان يفشل.
+    # 4. 🚀 الحل النهائي: إرسال رسالة جديدة بدون parse_mode="Markdown" 🚀
     try:
-        # نحذف الرسالة القديمة إذا أمكن (لتنظيف المحادثة)
+        # نحاول حذف الرسالة القديمة أولاً (للتنظيف)
         try:
              await update.effective_message.delete()
         except Exception:
@@ -214,12 +210,13 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
         await update.effective_message.reply_text(
             text=text, 
             reply_markup=reply_markup,
-            parse_mode="Markdown" 
+            # 🛑 تم إزالة parse_mode="Markdown" هنا لحل التعارض المحتمل
         )
     except Exception as e:
          logger.error(f"Final attempt failed to reply with WebApp buttons: {e}")
-         # حل أخير في حال فشل الإرسال أيضاً (يرسل نص عادي بدون أزرار)
-         await update.effective_message.reply_text("⚠️ فشل في عرض قائمة المحلات بشكل كامل. الرجاء التحقق من الـ Logs.")
+         # حل أخير جداً في حال فشل الإرسال (إرسال نص فقط بدون أزرار)
+         text_only_fallback = "⚠️ فشل إرسال قائمة المحلات المزودة بروابط الويب. هذا يؤكد أن المشكلة في الروابط المخزنة في قاعدة البيانات. القائمة المتوفرة هي:\n" + "\n".join([shop['name'] + " (" + shop['url'] + ")" for shop in shops])
+         await update.effective_message.reply_text(text_only_fallback)
     
     return ADMIN_MENU
 
