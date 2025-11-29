@@ -1050,6 +1050,94 @@ def main() -> None:
 
             AGENT_MENU: [
                  CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"), 
+def main() -> None:
+    """بدء تشغيل البوت. تم التعديل لاستخدام Webhook القسري لبيئة Railway."""
+    
+    # 🚨 ملاحظة: يجب التأكد من وجود دالة setup_db() في ملف database.py
+    # وإلا سيفشل البوت في الإقلاع هنا.
+    setup_db() 
+    
+    BOT_TOKEN = os.getenv("BOT_TOKEN")
+    if not BOT_TOKEN:
+        logger.error("🚫 التوكن مال البوت (BOT_TOKEN) ما متوفر بمتغيرات البيئة.")
+        return
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # -------------------------------------------------------------------
+    # إعداد ConversationHandler (بقية حالات البوت التي أرسلتها سابقاً)
+    # -------------------------------------------------------------------
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start_command)],
+        
+        states={
+            ADMIN_MENU: [
+                CallbackQueryHandler(show_shops_admin_handler, pattern="^show_shops_admin$"),
+                CallbackQueryHandler(list_shops_to_delete, pattern="^delete_shop$"),
+                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
+                CallbackQueryHandler(admin_menu_handler, pattern="^(add_shop|manage_agents|admin_menu)$"),
+            ],
+            
+            ADD_SHOP_STATE: [
+                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_shop_data),
+            ],
+            
+            MANAGE_AGENT: [
+                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
+                CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
+                CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
+                CallbackQueryHandler(list_agents_to_delete, pattern="^delete_agent$"),
+                
+                CallbackQueryHandler(edit_agent_details_menu, pattern="^edit_details_\d+$"),
+                
+                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+                CallbackQueryHandler(list_shops_to_assign, pattern="^assign_shops_\d+$"),
+            ],
+            
+            ADD_AGENT_STATE: [
+                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_agent_data)
+            ],
+
+            SELECT_SHOPS: [
+                CallbackQueryHandler(handle_shop_assignment, pattern="^confirm_shop_assignment$"),
+                CallbackQueryHandler(toggle_shop_selection, pattern="^toggle_shop_\d+$"), 
+                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+            ],
+
+            EDIT_AGENT_DETAILS: [
+                CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_agent_details), 
+            ],
+            
+            DELETE_SHOP_STATE: [
+                CallbackQueryHandler(show_admin_menu, pattern="^admin_menu$"), 
+                CallbackQueryHandler(confirm_shop_deletion, pattern="^delete_shop_confirm_\d+$"),
+            ],
+            
+            DELETE_AGENT_STATE: [
+                CallbackQueryHandler(manage_agents_menu, pattern="^manage_agents$"), 
+                CallbackQueryHandler(confirm_agent_deletion, pattern="^delete_agent_confirm_\d+$"),
+            ],
+
+            EDIT_SHOP_STATE: [
+                CallbackQueryHandler(list_shops_to_edit, pattern="^edit_shops$"), 
+                CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
+                CallbackQueryHandler(prompt_edit_shop_details, pattern="^edit_shop_select_\d+$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_updated_shop_data),
+            ],
+            
+            AGENT_LOGIN: [
+                CallbackQueryHandler(agent_login_prompt, pattern="^agent_login_prompt$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, agent_login_receive_code),
+                CallbackQueryHandler(start_command, pattern="^start$"),
+                CommandHandler("start", start_command), 
+            ],
+
+            AGENT_MENU: [
+                 CallbackQueryHandler(show_agent_shops_handler, pattern="^show_agent_shops$"), 
                  CallbackQueryHandler(show_agent_menu, pattern="^agent_menu_back$"), 
                  CallbackQueryHandler(start_command, pattern="^start$"), 
                  CommandHandler("start", start_command), 
@@ -1060,30 +1148,34 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
-
+    
     # -------------------------------------------------------------------
-    # 🚨 التعديل الحاسم للتشغيل على Railway (استخدام Webhook)
+    # 🚀 الكود الجديد والفعّال لتشغيل Webhook على Railway
     # -------------------------------------------------------------------
     
-    # Railway يُحدد المنفذ تلقائياً في متغير البيئة PORT
     PORT = int(os.environ.get('PORT', '8080')) 
-    # Railway يُوفر رابط المشروع الخارجي في متغير WEBHOOK_URL
-    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') 
-
-    if WEBHOOK_URL:
-         # وضعية التشغيل Webhook (للسيرفرات السحابية)
-         application.run_webhook(
-             listen="0.0.0.0", # ضروري للإستماع على جميع الواجهات
-             port=PORT,
-             url_path=BOT_TOKEN,  # نستخدم التوكن كمسار سري للـ Webhook
-             webhook_url=WEBHOOK_URL + BOT_TOKEN
-         )
-         logger.info(f"🤖 البوت جاي يشتغل بوضعية Webhook على الرابط: {WEBHOOK_URL}")
-    else:
-        # وضعية التشغيل Polling (للتجربة المحلية فقط)
-        logger.info("🤖 البوت جاي يشتغل بوضعية Polling...")
+    
+    try:
+        # نعتمد على RAILWAY_STATIC_URL الذي يتم توفيره دائماً في بيئة Railway
+        RAILWAY_URL = os.environ['RAILWAY_STATIC_URL'] 
+        
+        # تشغيل الـ Webhook قسراً
+        application.run_webhook(
+            listen="0.0.0.0", # ضروري للإستماع على جميع الواجهات
+            port=PORT,
+            url_path=BOT_TOKEN,  # المسار السري
+            # بناء رابط الـ Webhook الكامل
+            webhook_url=f"https://{RAILWAY_URL}/{BOT_TOKEN}"
+        )
+        logger.info(f"🤖 تم تشغيل البوت بوضعية Webhook قسرية على العنوان: {RAILWAY_URL}")
+        
+    except KeyError:
+        # إذا لم يتمكن لسبب ما من قراءة RAILWAY_STATIC_URL
+        logger.error("🚫 فشل قراءة عنوان Railway. رجوع إلى Polling (البوت سيتوقف قريباً).")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
     # -------------------------------------------------------------------
+
 
 
 if __name__ == "__main__":
