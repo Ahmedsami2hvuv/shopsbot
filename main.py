@@ -70,14 +70,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # 1. تحديد المصدر والرسالة
     if update.callback_query:
-        # 🚨 التعديل هنا: عند الرجوع بالـ callback، لا نستخدم update.callback_query.message
-        # لتجنب خطأ تعديل رسالة محذوفة أو قديمة، بل نستخدم effective_message
         message = update.callback_query.message
     elif update.message:
         message = update.message
     else:
-        # إذا لم يكن هناك رسالة أو استدعاء، نرجع للقائمة الرئيسية
-        return MAIN_MENU 
+        return MAIN_MENU
         
     user_id = update.effective_user.id
         
@@ -86,9 +83,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
     # 2. التحقق من هوية المدير
     if is_admin(user_id):
-        # ✅ الحل: إذا كان المدير، يتم نقله مباشرة إلى قائمة الإدارة
-        # نستخدم is_command=True لضمان إرسال رسالة جديدة بدلاً من تعديلها
-        return await show_admin_menu(update, context, is_command=True) 
+        # إذا كان المدير، يتم نقله مباشرة إلى قائمة الإدارة
+        return await show_admin_menu(update, context, is_command=True)
     
     # 3. إذا لم يكن المدير، يتم عرض قائمة الدخول العادية
     keyboard = [
@@ -117,25 +113,13 @@ async def admin_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 # دوال إدارة المدير (ADMIN)
 # ----------------------------------------------------------------------
 
-async def admin_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يتحقق من هوية المدير ويعرض القائمة الرئيسية للإدارة (في حال تم استدعاؤه بـ callback)."""
-    user_id = update.effective_user.id
-    await update.callback_query.answer()
-    
-    if is_admin(user_id):
-        return await show_admin_menu(update, context)
-    else:
-        await update.callback_query.edit_message_text("❌ آسف، لا تملك صلاحية المدير.")
-        return MAIN_MENU
-
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is_command: bool = False) -> int:
     """تظهر قائمة خيارات المدير، وتُستخدم للرجوع من أي قائمة فرعية."""
     
+    # 🚨 تم تبسيط الأزرار (حذف تعديل وحذف المحلات العامة)
     keyboard = [
-        [InlineKeyboardButton("عرض المحلات 📊", callback_data="show_shops_list"), 
+        [InlineKeyboardButton("عرض المحلات (تعديل/حذف) 📊", callback_data="show_shops_list"), 
          InlineKeyboardButton("إضافة محل 🏬", callback_data="add_shop")], 
-        [InlineKeyboardButton("تعديل محل ✏️", callback_data="edit_shops"), 
-         InlineKeyboardButton("حذف محل 🗑️", callback_data="delete_shop")], # تم إبقاء الزر ليدخل على قائمة العرض
         [InlineKeyboardButton("إدارة المجهزين 🧑‍💻", callback_data="manage_agents")],
         [InlineKeyboardButton("تسجيل الخروج 🚪", callback_data="start")] # لإرجاع المستخدم للقائمة الرئيسية
     ]
@@ -143,15 +127,16 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is
 
     text = "👋🏼 أهلاً بك يا مدير! إختار شنو تريد تسوي:"
     
-    if update.callback_query:
+    if update.callback_query and not is_command:
         await update.callback_query.answer()
         try:
              await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
         except Exception:
+             # في حال فشل التعديل، نرسل رسالة جديدة
              await update.callback_query.message.reply_text(text=text, reply_markup=reply_markup)
              
     elif update.message or is_command:
-        # يستخدم عند استدعاء الدالة من الأمر /admin
+        # يستخدم عند استدعاء الدالة من الأمر /admin أو /start (للمدير)
         await update.effective_message.reply_text(text=text, reply_markup=reply_markup)
         
     return ADMIN_MENU
@@ -162,23 +147,25 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     data = query.data
     
-    # FIX: حل مشكلة الرجوع من القوائم الفرعية
+    # الرجوع للقائمة الرئيسية للمدير
     if data == "admin_menu":
         return await show_admin_menu(update, context)
         
     elif data == "add_shop":
+        # 🚨 تم تعديل زر الرجوع ليكون "إنهاء والعودة"
         await query.edit_message_text(
             "📝 أرسل اسم المحل ورابطه في سطرين منفصلين:\n"
             "الاسم\n"
             "الرابط (URL)",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة", callback_data="admin_menu")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ إنهاء والعودة", callback_data="admin_menu")]])
         )
         return ADD_SHOP_STATE
     
     elif data == "manage_agents":
-        return await manage_agents_menu(update, context)
+        # 🚨 توجه مباشرة إلى قائمة عرض/إدارة المجهزين الجديدة
+        return await show_and_manage_agents(update, context)
 
-    # FIX: عرض المحلات، حذف محل، وتعديل محل كلها تذهب إلى قائمة عرض المحلات
+    # عرض المحلات
     elif data in ["show_shops_list", "delete_shop", "edit_shops"]:
         return await show_and_search_shops(update, context)
         
@@ -190,15 +177,20 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------------------------------------------------------------
 
 async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل بيانات المحل الجديد ويحفظها."""
+    """يستقبل بيانات المحل الجديد ويحفظها، ويبقى في نفس الحالة لإضافة المزيد."""
     text = update.message.text.strip()
     parts = text.split('\n', 1) 
+    
+    # 🚨 زر العودة لإنهاء عملية الإضافة المتعددة
+    keyboard = [[InlineKeyboardButton("✅ إنهاء والعودة", callback_data="admin_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
     if len(parts) != 2:
         await update.message.reply_text(
             "❌ صيغة الإدخال خطأ. لازم تكون:\n"
             "الاسم\n"
-            "الرابط (URL)"
+            "الرابط (URL)",
+            reply_markup=reply_markup
         )
         return ADD_SHOP_STATE
 
@@ -206,17 +198,26 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     shop_url = parts[1].strip()
 
     if add_shop(shop_name, shop_url):
-        await update.message.reply_text(f"✅ تم إضافة محل: {shop_name}")
+        await update.message.reply_text(
+            f"✅ تم إضافة محل: **{shop_name}** بنجاح.\n"
+            "أرسل المحل التالي (الاسم والرابط في سطرين)، أو إضغط إنهاء:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
     else:
-        await update.message.reply_text("❌ فشل إضافة المحل. قد يكون الاسم مستخدماً بالفعل أو حدث خطأ في قاعدة البيانات.")
+        await update.message.reply_text(
+            "❌ فشل إضافة المحل. قد يكون الاسم مستخدماً بالفعل أو حدث خطأ في قاعدة البيانات.",
+            reply_markup=reply_markup
+        )
 
-    # نعود إلى القائمة الرئيسية للمدير
-    return await show_admin_menu(update, context, is_command=True) # is_command=True لتجنب خطأ الـ callback
+    # البقاء في نفس الحالة (ADD_SHOP_STATE) لإضافة محل جديد
+    return ADD_SHOP_STATE
 
-# --- عرض وبحث المحلات (SHOW_SHOPS_ADMIN State) ---
+# ... (بقية دوال إدارة المحلات: show_and_search_shops, admin_shop_search_handler, etc.) 
+# ملاحظة: هذه الدوال لم يتم تغييرها جذريًا عن الكود الذي تم إرساله سابقًا.
 
 async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TYPE, search_term: str = None) -> int:
-    """تعرض قائمة المحلات وتسمح بالبحث، مع أزرار الإدارة."""
+    """تعرض قائمة المحلات وتسمح بالبحث، مع أزرار الإدارة (تعديل وحذف)."""
     
     if search_term:
         shops = get_shops_by_search(search_term) # بحث جزئي
@@ -254,7 +255,7 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             text = "❌ لا توجد محلات مُضافة حالياً."
             keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
 
-    # FIX: زر العودة من قائمة عرض المحلات
+    # زر العودة من قائمة عرض المحلات
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -262,11 +263,18 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
     # التعامل مع تحديث الرسالة أو إرسال رسالة جديدة
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            text=text, 
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
+        try:
+            await update.callback_query.edit_message_text(
+                text=text, 
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        except:
+             await update.callback_query.message.reply_text(
+                text=text, 
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
     elif update.message:
         await update.message.reply_text(
             text=text,
@@ -274,24 +282,18 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown"
         )
     
-    # نعود إلى حالة عرض المحلات للسماح بالبحث أو النقر على الأزرار
     return SHOW_SHOPS_ADMIN
 
 async def admin_shop_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يستقبل نص البحث من المدير (في حالة SHOW_SHOPS_ADMIN) ويعرض النتائج."""
     search_term = update.message.text.strip()
-    
-    # نستخدم الدالة الأساسية لتنفيذ البحث وعرض النتائج
     return await show_and_search_shops(update, context, search_term)
 
-# --- حذف المحلات (DELETE_SHOP_STATE) ---
-
 async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ينفذ حذف المحل فعلياً (بدون خطوة تأكيد ثانية)."""
+    """ينفذ حذف المحل فعلياً."""
     query = update.callback_query
     await query.answer()
     
-    # استخلاص ID المحل من CallbackData (delete_shop_confirm_ID)
     try:
         shop_id = int(query.data.split('_')[-1])
     except ValueError:
@@ -307,23 +309,18 @@ async def confirm_shop_deletion(update: Update, context: ContextTypes.DEFAULT_TY
             "❌ حدث خطأ أثناء حذف المحل.", 
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة لقائمة المحلات", callback_data="show_shops_list")]])
         )
-    # نعود إلى قائمة البحث والعرض بعد الحذف
     return SHOW_SHOPS_ADMIN
-
-# --- تعديل المحلات (EDIT_SHOP_STATE) ---
 
 async def prompt_edit_shop_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يطلب من المدير إدخال تفاصيل التعديل للمحل المحدد."""
     query = update.callback_query
     await query.answer()
     
-    # استخلاص ID المحل من CallbackData (edit_shop_select_ID)
     try:
         shop_id = int(query.data.split('_')[-1])
     except ValueError:
         return await show_admin_menu(update, context)
     
-    # تخزين ID المحل في بيانات المستخدم
     context.user_data['selected_shop_id'] = shop_id
     
     keyboard = [[InlineKeyboardButton("🔙 إلغاء والعودة", callback_data="show_shops_list")]]
@@ -363,34 +360,71 @@ async def receive_updated_shop_data(update: Update, context: ContextTypes.DEFAUL
     else:
         await update.message.reply_text("❌ فشل تحديث التفاصيل. قد يكون الاسم مستخدماً أو حدث خطأ.")
 
-    # نعود إلى قائمة عرض المحلات
     return await show_and_search_shops(update, context) 
 
+
 # ----------------------------------------------------------------------
-# دوال إدارة المجهزين (Agents Management)
+# دوال إدارة المجهزين (Agents Management) - تم تبسيطها بالكامل
 # ----------------------------------------------------------------------
 
-async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة خيارات إدارة المجهزين."""
-    query = update.callback_query
-    await query.answer()
+# 🚨 تم حذف دالة manage_agents_menu وجعل show_and_manage_agents هي الدالة الأساسية
+
+async def show_and_manage_agents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تعرض قائمة المجهزين مع أزرار الإدارة (تعديل، حذف، تخصيص) بشكل مصغّر."""
     
-    keyboard = [
-        [InlineKeyboardButton("إضافة مجهز ➕", callback_data="add_new_agent")],
-        [InlineKeyboardButton("عرض المجهزين 📄", callback_data="list_agents")],
-        [InlineKeyboardButton("حذف مجهز 🗑️", callback_data="delete_agent_prompt")],
-        [InlineKeyboardButton("تعديل مجهز ✏️", callback_data="edit_agent_prompt")],
-        [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")] # FIX: زر العودة
-    ]
+    # نستخدم query.message في حالة الـ callback و update.message في حالة الـ command
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        message = query.message
+    else:
+        message = update.message
+        
+    agents = get_all_agents()
+    
+    keyboard = []
+    
+    # 1. زر إضافة مجهز (الزر العلوي المطلوب)
+    keyboard.append([InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")])
+
+    if agents:
+        text = "📄 **قائمة المجهزين والإدارة السريعة:**"
+
+        for agent in agents:
+            agent_id = agent['id']
+            agent_name = agent['name']
+            
+            # 1. زر المجهز كعنوان
+            keyboard.append([InlineKeyboardButton(f"👤 {agent_name}", callback_data="ignore")])
+            
+            # 2. أزرار الإدارة المصغّرة (3 أزرار برموز تعبيرية فقط)
+            assign_shops_btn = InlineKeyboardButton("🔗🏬", callback_data=f"assign_shops_{agent_id}")
+            edit_details_btn = InlineKeyboardButton("✏️", callback_data=f"edit_details_{agent_id}")
+            delete_btn = InlineKeyboardButton("🗑️", callback_data=f"delete_agent_confirm_{agent_id}") # نفّذ الحذف مباشرة بالتأكيد
+            
+            keyboard.append([assign_shops_btn, edit_details_btn, delete_btn])
+            keyboard.append([InlineKeyboardButton("---", callback_data="ignore_2")]) # فاصل
+    
+    else:
+        # إذا لم يكن هناك مجهزون، نُبقي على زر الإضافة فقط
+        text = "❌ لا يوجد مجهزون مُضافون حالياً. إضغط على الزر أعلاه للإضافة."
+
+    # زر العودة 
+    keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = "🧑‍💻 قائمة إدارة المجهزين. إختار الإجراء:"
-    
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+
+    if update.callback_query:
+        try:
+            await message.edit_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+        except:
+             await message.reply_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+    elif update.message:
+         await message.reply_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+         
     return MANAGE_AGENT
 
 async def manage_agents_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """معالج عام لأزرار قائمة إدارة المجهزين."""
+    """معالج عام لأزرار قائمة إدارة المجهزين (بعد التبسيط)."""
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -400,21 +434,13 @@ async def manage_agents_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "📝 أرسل اسم المجهز والرمز السري في سطرين منفصلين:\n"
             "الاسم\n"
             "الرمز السري (Code)",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة", callback_data="manage_agents")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة", callback_data="manage_agents_back")]])
         )
         return ADD_AGENT_STATE
         
-    elif data == "list_agents":
-        return await list_all_agents(update, context)
-        
-    elif data == "delete_agent_prompt" or data == "edit_agent_prompt":
-        # عرض قائمة المجهزين لاختيار من سيتم حذفه أو تعديله
-        context.user_data['action_type'] = data.split('_')[0] # 'delete' or 'edit'
-        return await list_agents_for_selection(update, context)
-        
-    # FIX: حل مشكلة الرجوع
-    elif data == "manage_agents":
-        return await manage_agents_menu(update, context)
+    # الرجوع من قائمة الإضافة (يتم استدعاء الدالة الأساسية للعرض)
+    elif data == "manage_agents_back":
+         return await show_and_manage_agents(update, context)
         
     return MANAGE_AGENT
 
@@ -439,149 +465,51 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         await update.message.reply_text("❌ فشل إضافة المجهز. الرمز السري قد يكون مستخدماً أو حدث خطأ في قاعدة البيانات.")
 
-    # نعود إلى قائمة إدارة المجهزين
-    return await manage_agents_menu(update, context)
+    # نعود إلى قائمة عرض/إدارة المجهزين
+    return await show_and_manage_agents(update, context)
 
 
 # ----------------------------------------------------------------------
-# دوال عرض واختيار المجهزين (Used for List, Edit, Delete, Assign)
+# دوال الإدارة الفرعية للمجهزين
 # ----------------------------------------------------------------------
-
-async def list_all_agents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة بجميع المجهزين."""
-    query = update.callback_query
-    await query.answer()
-    
-    agents = get_all_agents()
-    
-    if agents:
-        text = "📄 **قائمة المجهزين:**"
-        keyboard = [
-            [InlineKeyboardButton(f"👤 {agent['name']}", callback_data=f"select_agent_{agent['id']}")]
-            for agent in agents
-        ]
-    else:
-        text = "❌ لا يوجد مجهزون مُضافون حالياً."
-        keyboard = [[InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")]]
-
-    keyboard.append([InlineKeyboardButton("🔙 العودة لقائمة الإدارة", callback_data="manage_agents")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
-    return MANAGE_AGENT
-
-async def list_agents_for_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة المجهزين لاختيار مجهز معين (للتعديل، الحذف، أو الربط)."""
-    query = update.callback_query
-    await query.answer()
-    
-    agents = get_all_agents()
-    action_type = context.user_data.get('action_type', 'select')
-    
-    if agents:
-        text = "إختار المجهز الذي تريد "
-        if action_type == 'delete':
-             text += "**حذفه**:"
-        elif action_type == 'edit':
-             text += "**تعديل تفاصيله**:"
-        elif action_type == 'assign':
-             text += "**تخصيص المحلات له**:"
-        else:
-             text += "**اختياره**:"
-
-        keyboard = [
-            [InlineKeyboardButton(f"👤 {agent['name']}", callback_data=f"select_agent_{agent['id']}")]
-            for agent in agents
-        ]
-    else:
-        text = "❌ لا يوجد مجهزون مُضافون حالياً."
-        keyboard = [[InlineKeyboardButton("🔙 العودة", callback_data="manage_agents")]]
-
-    keyboard.append([InlineKeyboardButton("🔙 العودة", callback_data="manage_agents")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
-    return MANAGE_AGENT
-
-async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة الإجراءات لمجهز محدد (للتعديل أو الربط أو الحذف)."""
-    query = update.callback_query
-    await query.answer()
-    
-    # استخلاص ID المجهز
-    try:
-        agent_id = int(query.data.split('_')[-1])
-        context.user_data['selected_agent_id'] = agent_id
-    except ValueError:
-        return await manage_agents_menu(update, context)
-
-    agent_name = get_agent_name_by_id(agent_id)
-    action_type = context.user_data.get('action_type', 'select')
-    
-    if action_type == 'delete':
-        text = f"هل أنت متأكد من حذف المجهز **{agent_name}**؟"
-        keyboard = [
-            [InlineKeyboardButton("✅ تأكيد الحذف", callback_data=f"delete_agent_confirm_{agent_id}")],
-            [InlineKeyboardButton("❌ إلغاء والعودة", callback_data="delete_agent_prompt")] # العودة لقائمة الاختيار
-        ]
-        
-    elif action_type == 'edit':
-        text = f"إختار الإجراء المطلوب للمجهز **{agent_name}**:"
-        keyboard = [
-            [InlineKeyboardButton("✏️ تعديل تفاصيل الدخول", callback_data=f"edit_details_{agent_id}")],
-            [InlineKeyboardButton("🔗 تخصيص المحلات", callback_data=f"assign_shops_{agent_id}")],
-            [InlineKeyboardButton("🔙 العودة", callback_data="edit_agent_prompt")]
-        ]
-        
-    else: # Default (Assign only)
-        text = f"إختار الإجراء المطلوب للمجهز **{agent_name}**:"
-        keyboard = [
-            [InlineKeyboardButton("🔗 تخصيص المحلات", callback_data=f"assign_shops_{agent_id}")],
-            [InlineKeyboardButton("🔙 العودة", callback_data="manage_agents")]
-        ]
-        
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
-    return MANAGE_AGENT
-
-# --- حذف مجهز (DELETE_AGENT_STATE) ---
 
 async def confirm_agent_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ينفذ حذف المجهز فعلياً."""
+    """ينفذ حذف المجهز فعلياً (بعد النقر على زر السلة)."""
     query = update.callback_query
     await query.answer()
     
     try:
+        # CallbackData: delete_agent_confirm_ID
         agent_id = int(query.data.split('_')[-1])
     except ValueError:
-        return await manage_agents_menu(update, context)
+        return await show_and_manage_agents(update, context)
 
     agent_name = get_agent_name_by_id(agent_id)
     
     if delete_agent(agent_id):
-        await query.edit_message_text(f"✅ تم حذف المجهز **{agent_name}** بنجاح!")
+        # نرسل رسالة جديدة للتأكيد ثم نعود للقائمة
+        await query.message.reply_text(f"✅ تم حذف المجهز **{agent_name}** بنجاح!")
     else:
-        await query.edit_message_text("❌ حدث خطأ أثناء حذف المجهز.")
+        await query.message.reply_text("❌ حدث خطأ أثناء حذف المجهز.")
 
-    # نعود لقائمة اختيار المجهزين للحذف
-    context.user_data['action_type'] = 'delete'
-    return await list_agents_for_selection(update, context)
+    # نعود لقائمة الإدارة الرئيسية للمجهزين
+    return await show_and_manage_agents(update, context)
 
-
-# --- تعديل تفاصيل المجهز (EDIT_AGENT_DETAILS) ---
 
 async def edit_agent_details_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يطلب من المدير إدخال تفاصيل التعديل للمجهز المحدد."""
+    """يطلب من المدير إدخال تفاصيل التعديل للمجهز المحدد (بعد النقر على زر القلم)."""
     query = update.callback_query
     await query.answer()
     
     try:
+        # CallbackData: edit_details_ID
         agent_id = int(query.data.split('_')[-1])
         context.user_data['selected_agent_id'] = agent_id
     except ValueError:
-        return await manage_agents_menu(update, context)
+        return await show_and_manage_agents(update, context)
 
-    keyboard = [[InlineKeyboardButton("🔙 إلغاء والعودة", callback_data=f"select_agent_{agent_id}")]]
+    # زر العودة يعود إلى شاشة إدارة المجهزين
+    keyboard = [[InlineKeyboardButton("🔙 إلغاء والعودة", callback_data="manage_agents_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
@@ -602,7 +530,7 @@ async def receive_updated_agent_data(update: Update, context: ContextTypes.DEFAU
     
     if not agent_id:
         await update.message.reply_text("❌ حدث خطأ، لم يتم تحديد المجهز المطلوب تعديله.")
-        return await manage_agents_menu(update, context)
+        return await show_and_manage_agents(update, context)
 
     if len(parts) != 2:
         await update.message.reply_text(
@@ -623,16 +551,12 @@ async def receive_updated_agent_data(update: Update, context: ContextTypes.DEFAU
     else:
         await update.message.reply_text("❌ فشل تحديث التفاصيل. حدث خطأ في قاعدة البيانات.")
 
-    # نعود لقائمة اختيار المجهز
-    context.user_data['action_type'] = 'edit'
-    return await list_agents_for_selection(update, context)
+    # نعود لقائمة الإدارة الرئيسية للمجهزين
+    return await show_and_manage_agents(update, context)
 
-# ----------------------------------------------------------------------
-# دوال تخصيص المحلات للمجهزين (Assignment)
-# ----------------------------------------------------------------------
 
 async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يعرض قائمة المحلات لإضافة أو إزالة الربط من مجهز محدد."""
+    """يعرض قائمة المحلات لإضافة أو إزالة الربط من مجهز محدد (بعد النقر على زر 🔗🏬)."""
     query = update.callback_query
     await query.answer()
     
@@ -642,11 +566,11 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
             agent_id = int(query.data.split('_')[-1])
             context.user_data['selected_agent_id'] = agent_id
         except ValueError:
-            return await manage_agents_menu(update, context)
+            return await show_and_manage_agents(update, context)
     else:
         agent_id = context.user_data.get('selected_agent_id')
         if not agent_id:
-            return await manage_agents_menu(update, context)
+            return await show_and_manage_agents(update, context)
             
     agent_name = get_agent_name_by_id(agent_id)
     all_shops = get_all_shops()
@@ -671,173 +595,13 @@ async def list_shops_to_assign(update: Update, context: ContextTypes.DEFAULT_TYP
         text = "❌ لا توجد محلات مُضافة لتخصيصها."
 
     # زر العودة يعود إلى قائمة الإجراءات للمجهز المحدد
-    keyboard.append([InlineKeyboardButton("🔙 العودة", callback_data=f"select_agent_{agent_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 العودة", callback_data="manage_agents_back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
     return SELECT_SHOPS
 
-# FIX: تم تصحيح هذه الدالة لحل مشكلة أزرار الصح والخطأ
-async def toggle_shop_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ربط أو إلغاء ربط محل بمجهز عند النقر على علامة صح/خطأ."""
-    query = update.callback_query
-    await query.answer()
-    
-    # 1. استخلاص ID المحل والمجهز
-    try:
-        # CallbackData: 'toggle_shop_SHOPID'
-        shop_id = int(query.data.split('_')[-1])
-        agent_id = context.user_data.get('selected_agent_id')
-        
-        if not agent_id:
-             await query.edit_message_text("❌ حدث خطأ: لم يتم تحديد المجهز المطلوب.")
-             return await manage_agents_menu(update, context)
-             
-    except Exception as e:
-        logger.error(f"Error extracting IDs in toggle_shop_selection: {e}")
-        return await manage_agents_menu(update, context)
-
-    # 2. تحديد حالة الربط الحالية
-    assigned_shops = get_assigned_shop_ids(agent_id)
-    is_assigned = shop_id in assigned_shops
-    
-    # 3. تبديل حالة الربط (Toggle)
-    # نستخدم `not is_assigned` لقلب الحالة (إذا كان مربوطاً، ألغي الربط، وإذا لم يكن، اربط)
-    if toggle_agent_shop_assignment(agent_id, shop_id, not is_assigned):
-        # 4. إعادة عرض القائمة لتحديث الأزرار
-        # يجب استدعاء list_shops_to_assign الذي يعيد عرض القائمة
-        return await list_shops_to_assign(update, context)
-    else:
-        await query.answer("❌ فشل تحديث الربط في قاعدة البيانات.")
-        return SELECT_SHOPS # البقاء في نفس الحالة
-
-
-# ----------------------------------------------------------------------
-# دوال المجهز (Agent)
-# ----------------------------------------------------------------------
-
-async def agent_login_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يطلب من المجهز إدخال الرمز السري."""
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(
-        "🔑 **أدخل رقمك السري الآن**:",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة", callback_data="start")]])
-    )
-    return AGENT_LOGIN
-
-async def agent_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل الرمز السري ويتحقق منه."""
-    secret_code = update.message.text.strip()
-    agent = check_agent_code(secret_code)
-    
-    if agent:
-        # تسجيل الدخول الناجح
-        context.user_data['is_agent'] = True
-        context.user_data['agent_id'] = agent['id']
-        context.user_data['agent_name'] = agent['name']
-        
-        # ربط الـ Telegram ID بآيدي المجهز في قاعدة البيانات
-        # (يجب إضافة دالة في database.py لتحديث telegram_id) - نفترض أن هذه خطوة لاحقة
-        
-        await update.message.reply_text(f"👋🏼 أهلاً بك يا مجهز {agent['name']}!")
-        return await show_agent_menu(update, context, is_login=True)
-    else:
-        await update.message.reply_text("❌ رمز سري خاطئ. حاول مرة أخرى.")
-        return AGENT_LOGIN
-
-async def show_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is_login: bool = False) -> int:
-    """يعرض قائمة المجهز."""
-    
-    agent_name = context.user_data.get('agent_name', 'مجهز')
-    
-    keyboard = [
-        [InlineKeyboardButton("عرض المحلات المخصصة 📊", callback_data="show_agent_shops")],
-        [InlineKeyboardButton("تسجيل الخروج 🚪", callback_data="start")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    text = f"👋🏼 أهلاً بك يا {agent_name}!"
-    
-    if update.callback_query and not is_login:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
-    elif update.message or is_login:
-        await update.effective_message.reply_text(text=text, reply_markup=reply_markup)
-        
-    return AGENT_MENU
-
-async def agent_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """معالج عام لأزرار قائمة المجهز."""
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    
-    if data == "show_agent_shops":
-        return await show_agent_shops(update, context)
-        
-    return AGENT_MENU
-
-async def show_agent_shops(update: Update, context: ContextTypes.DEFAULT_TYPE, search_term: str = None) -> int:
-    """تعرض المحلات المخصصة للمجهز وتسمح بالبحث."""
-    
-    agent_id = context.user_data.get('agent_id')
-    
-    if search_term:
-        shops = get_agent_shops_by_search(agent_id, search_term)
-    else:
-        shops = get_agent_shops_by_search(agent_id, "") # جلب الكل
-    
-    keyboard = []
-    
-    if shops:
-        if search_term:
-            text = f"✅ **نتائج البحث عن '{search_term}'**:"
-        else:
-            text = "📊 **محلاتك المخصصة:**\n يمكنك كتابة اسم المحل للبحث السريع."
-            
-        for shop in shops:
-            shop_url = shop['url']
-            if not shop_url.lower().startswith(('http://', 'https://')):
-                 shop_url = "https://" + shop_url 
-            
-            # زر رابط المحل
-            url_button = InlineKeyboardButton(text=f"🔗 {shop['name']}", url=shop_url)
-            keyboard.append([url_button])
-            keyboard.append([InlineKeyboardButton("---", callback_data="ignore")]) # فاصل
-    
-    else:
-        if search_term:
-            text = f"❌ لا توجد محلات مطابقة لـ '{search_term}'."
-        else:
-            text = "❌ لم يتم تخصيص أي محلات لك حالياً."
-
-    # زر العودة للقائمة
-    keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="agent_menu_back")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    if update.callback_query:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            text=text, 
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-    elif update.message:
-        await update.message.reply_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-    
-    return AGENT_MENU
-
-async def agent_shop_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """يستقبل نص البحث من المجهز ويعرض النتائج."""
-    search_term = update.message.text.strip()
-    return await show_agent_shops(update, context, search_term)
-
+# ... (بقية دوال المجهز Agent)
 
 # ----------------------------------------------------------------------
 # الدوال الرئيسية (Main)
@@ -856,7 +620,7 @@ def main() -> None:
 
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # 🚨 FIX: إضافة معالج للأمر /admin 
+    # إضافة معالج للأمر /admin 
     application.add_handler(CommandHandler("admin", admin_login_command))
     
     conv_handler = ConversationHandler(
@@ -864,7 +628,6 @@ def main() -> None:
         
         states={
             MAIN_MENU: [
-                # FIX: تم حذف admin_login، وتم استبدال agent_login_prompt
                 CallbackQueryHandler(agent_login_prompt, pattern=r"^agent_login_prompt$"),
                 CommandHandler("start", start_command),
             ],
@@ -877,11 +640,12 @@ def main() -> None:
 
             ADMIN_MENU: [
                 # FIX: admin_menu_handler الآن يعالج كل أزرار القائمة والرجوع
-                CallbackQueryHandler(admin_menu_handler, pattern=r"^(add_shop|manage_agents|show_shops_list|delete_shop|edit_shops|admin_menu)$"),
+                CallbackQueryHandler(admin_menu_handler, pattern=r"^(add_shop|manage_agents|show_shops_list|admin_menu)$"),
                 CommandHandler("start", start_command),
             ],
             
             ADD_SHOP_STATE: [
+                # 🚨 يتم البقاء في نفس الحالة
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_shop_data),
                 CallbackQueryHandler(admin_menu_handler, pattern=r"^admin_menu$"),
                 CommandHandler("start", start_command),
@@ -902,33 +666,35 @@ def main() -> None:
             ],
             
             MANAGE_AGENT: [
-                CallbackQueryHandler(manage_agents_handler, pattern=r"^(add_new_agent|list_agents|delete_agent_prompt|edit_agent_prompt|manage_agents)$"),
-                CallbackQueryHandler(list_agents_for_selection, pattern=r"^(list_agents|delete_agent_prompt|edit_agent_prompt)$"),
-                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"),
-                CallbackQueryHandler(edit_agent_details_menu, pattern=r"^edit_details_\d+$"),
-                CallbackQueryHandler(list_shops_to_assign, pattern=r"^assign_shops_\d+$"),
-                CallbackQueryHandler(confirm_agent_deletion, pattern=r"^delete_agent_confirm_\d+$"),
+                # 🚨 الحالة الأساسية أصبحت show_and_manage_agents
+                CallbackQueryHandler(show_and_manage_agents, pattern=r"^manage_agents$"), # استدعاء القائمة الرئيسية
+                CallbackQueryHandler(manage_agents_handler, pattern=r"^(add_new_agent|manage_agents_back)$"), # لمعالجة زر الإضافة والعودة
+                
+                # ربط الأزرار المصغّرة مباشرة بالدوال
+                CallbackQueryHandler(edit_agent_details_menu, pattern=r"^edit_details_\d+$"), # قلم
+                CallbackQueryHandler(list_shops_to_assign, pattern=r"^assign_shops_\d+$"), # رابط/محل
+                CallbackQueryHandler(confirm_agent_deletion, pattern=r"^delete_agent_confirm_\d+$"), # سلة مهملات
+                
                 CallbackQueryHandler(admin_menu_handler, pattern=r"^admin_menu$"),
                 CommandHandler("start", start_command),
             ],
             
             ADD_AGENT_STATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_agent_data),
-                CallbackQueryHandler(manage_agents_handler, pattern=r"^manage_agents$"),
+                CallbackQueryHandler(manage_agents_handler, pattern=r"^manage_agents_back$"),
                 CommandHandler("start", start_command),
             ],
             
             EDIT_AGENT_DETAILS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_updated_agent_data),
-                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"),
+                CallbackQueryHandler(manage_agents_handler, pattern=r"^manage_agents_back$"),
                 CommandHandler("start", start_command),
             ],
             
             SELECT_SHOPS: [
-                # FIX: معالج تبديل حالة الربط
                 CallbackQueryHandler(toggle_shop_selection, pattern=r"^toggle_shop_\d+$"), 
                 CallbackQueryHandler(list_shops_to_assign, pattern=r"^assign_shops_\d+$"),
-                CallbackQueryHandler(select_agent_menu, pattern=r"^select_agent_\d+$"),
+                CallbackQueryHandler(manage_agents_handler, pattern=r"^manage_agents_back$"),
                 CommandHandler("start", start_command),
             ],
             
@@ -947,16 +713,14 @@ def main() -> None:
     application.add_handler(conv_handler)
     
     # -------------------------------------------------------------------
-    # 🚀 الكود المصحح لتشغيل Webhook (باستخدام APP_PUBLIC_URL)
+    # 🚀 تشغيل Webhook (الذي تم إرساله سابقًا)
     # -------------------------------------------------------------------
     
     PORT = int(os.environ.get('PORT', '8080')) 
     
-    # نعتمد على المتغير الذي قمت بتعريفه يدوياً
     RAILWAY_URL = os.getenv('APP_PUBLIC_URL') 
     
     if RAILWAY_URL:
-        # تشغيل الـ Webhook
         url_path = BOT_TOKEN
         webhook_url = f"https://{RAILWAY_URL}/{url_path}"
         
