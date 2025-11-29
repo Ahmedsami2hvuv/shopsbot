@@ -11,10 +11,15 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-# استدعاء كل الدوال من database.py
-
-from database import setup_db, add_shop, get_all_shops, add_agent, get_all_agents, get_agent_name_by_id
-
+# استدعاء كل الدوال اللازمة من database.py (تم تصحيح الـ Imports هنا)
+from database import (
+    setup_db, 
+    add_shop, 
+    get_all_shops, 
+    add_agent, 
+    get_all_agents, 
+    get_agent_name_by_id
+) 
 
 # تعريف حالات المحادثة
 (
@@ -29,14 +34,12 @@ from database import setup_db, add_shop, get_all_shops, add_agent, get_all_agent
 ) = range(8)
 
 # تعريف الـ Admin IDs (الناس اللي عدها صلاحية الإدارة)
-# ملاحظة: لازم تحدد الأيدي مالتك هنا!
 ADMIN_IDS = [7032076289] # آيدي التليجرام مالتك
 
 # تفعيل نظام الـ Logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# تعيين الـ Logger للـ python-telegram-bot
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
@@ -56,19 +59,16 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     text = "👋🏼 أهلاً بك يا مدير! إختار شنو تريد تسوي:"
     
-    # لمعالجة الضغط على زر (CallbackQuery)
     if update.callback_query:
         await update.callback_query.answer()
-        # نعدل الرسالة الموجودة بدلاً من إرسال رسالة جديدة
         await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
-    # لمعالجة أمر /start جديد
     else:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
         
     return ADMIN_MENU
 
 # ----------------------------------------------------------------------
-# الدوال الأساسية (Start Command)
+# الدوال الأساسية
 # ----------------------------------------------------------------------
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -76,14 +76,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     user_id = update.effective_user.id
     
-    # اذا كان المستخدم هو Admin (إدارة)
     if user_id in ADMIN_IDS:
-        # توجه مباشرة للدالة الجديدة اللي تعرض قائمة المدير (وتعالج الكولباك)
         return await show_admin_menu(update, context) 
-        
-    # اذا كان مستخدم عادي (مجهز)
     else:
-        # راح نفرض انه المستخدم لازم يسجل دخول (Agent Login)
         keyboard = [
             [InlineKeyboardButton("دخول المجهز 🔑", callback_data="agent_login")]
         ]
@@ -92,13 +87,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "أهلاً بك. لرفع الطلبيات، إضغط على 'دخول المجهز'.",
             reply_markup=reply_markup
         )
-        return AGENT_LOGIN # نحوله لحالة تسجيل دخول المجهز
-
+        return AGENT_LOGIN
 
 async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يعالج الأزرار اللي تنضغط بقائمة المدير."""
     query = update.callback_query
-    
     data = query.data
     
     if data == "admin_menu": 
@@ -120,7 +113,7 @@ async def admin_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ADD_SHOP_STATE
 
     if data == "manage_agents":
-        return await manage_agents_menu(update, context) # توجيه لقائمة إدارة المجهزين
+        return await manage_agents_menu(update, context)
     
     return ADMIN_MENU
 
@@ -133,29 +126,24 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
 
-    shops = get_all_shops() # جلب المحلات
+    shops = get_all_shops()
     
     keyboard = []
     
     if shops:
-        # هنا نرتب الأزرار: كل 2 أو 3 زر بسطر واحد
         current_row = []
         for i, shop in enumerate(shops):
-            # إنشاء الزر كـ WebAppInfo (حتى يفتح نافذة المتصفح)
             button = InlineKeyboardButton(
                 text=shop['name'], 
                 web_app=WebAppInfo(url=shop['url'])
             )
             current_row.append(button)
             
-            # إذا صار عندنا 3 أزرار بالسطر، أو وصلنا لآخر محل:
             if len(current_row) == 3 or i == len(shops) - 1:
-                keyboard.append(current_row) # نضيف السطر للوحة المفاتيح
-                current_row = [] # نبدي سطر جديد
+                keyboard.append(current_row)
+                current_row = []
 
-        # إضافة زر العودة للقائمة الرئيسية بآخر شي
         keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
-        
         text = "📊 **إختر المحل لرفع الطلبية:**"
     
     else:
@@ -173,7 +161,6 @@ async def show_shops_admin_handler(update: Update, context: ContextTypes.DEFAULT
     
     return ADMIN_MENU
 
-
 # ----------------------------------------------------------------------
 # دوال إضافة محل (Add Shop State)
 # ----------------------------------------------------------------------
@@ -182,7 +169,6 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """يستقبل بيانات المحل ويحفظها بقاعدة البيانات."""
     
     try:
-        # فصل الإسم والرابط (نفترض أنه على سطرين)
         text = update.message.text.strip()
         parts = text.split('\n', 1) 
         
@@ -192,12 +178,11 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 "إسم المحل\n"
                 "رابط المحل (URL)"
             )
-            return ADD_SHOP_STATE # نرجع لنفس الحالة
+            return ADD_SHOP_STATE
 
         shop_name = parts[0].strip()
         shop_url = parts[1].strip()
 
-        # إستدعاء دالة الحفظ
         if add_shop(shop_name, shop_url):
             keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -216,13 +201,11 @@ async def receive_shop_data(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logger.error(f"Error adding shop: {e}")
         await update.message.reply_text("❌ حدث خطأ غير متوقع أثناء إضافة المحل.")
 
-    # نرجع لقائمة المدير
     return ADMIN_MENU
 
 # ----------------------------------------------------------------------
 # دوال إدارة المجهزين (Agent Management)
 # ----------------------------------------------------------------------
-
 
 async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تعرض قائمة خيارات إدارة المجهزين."""
@@ -231,7 +214,7 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     keyboard = [
         [InlineKeyboardButton("إضافة مجهز جديد ➕", callback_data="add_new_agent")], 
-        [InlineKeyboardButton("عرض وتعديل المجهزين 📄", callback_data="list_agents")], # شلنا (قريباً)
+        [InlineKeyboardButton("عرض وتعديل المجهزين 📄", callback_data="list_agents")],
         [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -241,21 +224,58 @@ async def manage_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
-    return MANAGE_AGENT # تحويل لحالة إدارة المجهز
+    return MANAGE_AGENT
 
+
+# **********************************************
+# * ضفنا الدالة list_agents_menu الناقصة هنا *
+# **********************************************
+
+async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """تعرض قائمة بالمجهزين الحاليين كأزرار للتعديل."""
+    query = update.callback_query
+    await query.answer()
+
+    agents = get_all_agents()
+    
+    keyboard = []
+    text = "📄 **قائمة المجهزين الحاليين:**\n\n"
+
+    if agents:
+        for agent in agents:
+            callback_data = f"select_agent_{agent['id']}" 
+            keyboard.append([InlineKeyboardButton(agent['name'], callback_data=callback_data)])
+        
+        text += "إختر المجهز اللي تريد تعدل عليه أو تربطه بمحلات:"
+
+    else:
+        text = "❌ لا يوجد مجهزين مُضافين حالياً."
+        keyboard.append([InlineKeyboardButton("➕ إضافة مجهز جديد", callback_data="add_new_agent")])
+
+    keyboard.append([InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        text=text, 
+        reply_markup=reply_markup,
+        parse_mode="Markdown" 
+    )
+    
+    return MANAGE_AGENT
+
+
+# **********************************************
+# * دالة اختيار المجهز (موضوع نقاشنا الرئيسي) *
+# **********************************************
 
 async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يعرض خيارات التعديل لمجهز محدد."""
     query = update.callback_query
     await query.answer()
 
-    # هنا نفصل الـ ID عن الـ Callback Data
     agent_id = int(query.data.split('_')[-1])
-    
-    # نحفظ الـ ID في الـ context حتى نستخدمه بالخطوات الجاية
     context.user_data['selected_agent_id'] = agent_id 
     
-    # نجلب اسم المجهز من القاعدة (نفترض أنك ضفت الدالة لـ database.py)
     agent_name = get_agent_name_by_id(agent_id) 
     if not agent_name:
         agent_name = f"المجهز رقم {agent_id}"
@@ -289,14 +309,13 @@ async def add_new_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "AZ1234",
         parse_mode="Markdown"
     )
-    return ADD_AGENT_STATE # تحويل لحالة إدخال بيانات المجهز
+    return ADD_AGENT_STATE
 
 
 async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """يستقبل بيانات المجهز ويحفظها بقاعدة البيانات."""
     
     try:
-        # فصل الإسم والرمز السري (نفترض أنهن على سطرين)
         text = update.message.text.strip()
         parts = text.split('\n', 1) 
         
@@ -306,12 +325,11 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "إسم المجهز\n"
                 "رمز الدخول السري"
             )
-            return ADD_AGENT_STATE # نرجع لنفس الحالة
+            return ADD_AGENT_STATE
 
         agent_name = parts[0].strip()
         agent_code = parts[1].strip()
 
-        # إستدعاء دالة الحفظ
         if add_agent(agent_name, agent_code):
             keyboard = [[InlineKeyboardButton("🔙 العودة لإدارة المجهزين", callback_data="manage_agents")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -330,7 +348,6 @@ async def receive_agent_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error adding agent: {e}")
         await update.message.reply_text("❌ حدث خطأ غير متوقع أثناء إضافة المجهز.")
 
-    # نرجع لقائمة إدارة المجهزين
     return MANAGE_AGENT
 
 
@@ -372,9 +389,9 @@ def main() -> None:
                 CallbackQueryHandler(admin_menu_handler, pattern="^admin_menu$"), 
                 # 2. إضافة مجهز جديد
                 CallbackQueryHandler(add_new_agent_menu, pattern="^add_new_agent$"), 
-                # 3. العودة من قائمة اختيار المجهز إلى قائمة المجهزين
+                # 3. العودة من قائمة اختيار المجهز إلى قائمة المجهزين (list_agents_menu موجودة ومُعرفة الآن)
                 CallbackQueryHandler(list_agents_menu, pattern="^list_agents$"), 
-                # 4. معالجة اختيار مجهز محدد (اللي جانت تسبب المشكلة)
+                # 4. معالجة اختيار مجهز محدد 
                 CallbackQueryHandler(select_agent_menu, pattern="^select_agent_\d+$"),
             ],
             
@@ -396,7 +413,6 @@ def main() -> None:
 
     logger.info("🤖 البوت جاي يشتغل (Long Polling)...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 
 if __name__ == "__main__":
