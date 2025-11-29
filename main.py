@@ -231,8 +231,9 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             if not shop_url.lower().startswith(('http://', 'https://')):
                  shop_url = "https://" + shop_url 
             
-            # ملاحظة: تم إزالة رمز 🔗 من الزر ليتوافق مع تعديلك الأخير
+            # زر المحل (بدون رمز رابط)
             url_button = InlineKeyboardButton(text=f" {shop['name']}", url=shop_url)
+            # أزرار الإدارة المصغرة
             edit_button = InlineKeyboardButton("✏️", callback_data=f"edit_shop_select_{shop['id']}")
             delete_button = InlineKeyboardButton("🗑️", callback_data=f"delete_shop_confirm_{shop['id']}")
             
@@ -245,9 +246,8 @@ async def show_and_search_shops(update: Update, context: ContextTypes.DEFAULT_TY
             text = f"❌ لا توجد محلات مطابقة لـ '{search_term}'."
         else:
             text = "❌ لا توجد محلات مُضافة حالياً."
-            # تم إزالة زر الإضافة من هنا ليتم وضعه في نهاية القائمة دائماً
 
-    # 💡 زر "إضافة محل جديد" تم نقله ليصبح في نهاية القائمة دائماً (حسب طلبك)
+    # ⬅️ الزر الذي سبب المشكلة: الآن تم تسجيله في الخطوة 1
     keyboard.append([InlineKeyboardButton("🏬 إضافة محل جديد", callback_data="add_shop")])
 
     keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="admin_menu")])
@@ -773,7 +773,8 @@ def main() -> None:
             SHOW_SHOPS_ADMIN: [
                 CallbackQueryHandler(confirm_shop_deletion, pattern=r"^delete_shop_confirm_\d+$"),
                 CallbackQueryHandler(prompt_edit_shop_details, pattern=r"^edit_shop_select_\d+$"),
-                CallbackQueryHandler(admin_menu_handler, pattern=r"^(show_shops_list|admin_menu)$"),
+                # ✅ التصحيح: تم إضافة 'add_shop' لتمكين الزر من العمل في هذه القائمة
+                CallbackQueryHandler(admin_menu_handler, pattern=r"^(show_shops_list|admin_menu|add_shop)$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_shop_search_handler),
                 CommandHandler("start", start_command),
             ],
