@@ -278,6 +278,36 @@ async def list_agents_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     return MANAGE_AGENT
 
+async def select_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """يعرض خيارات التعديل لمجهز محدد."""
+    query = update.callback_query
+    await query.answer()
+
+    # هنا نفصل الـ ID عن الـ Callback Data
+    agent_id = int(query.data.split('_')[-1])
+    
+    # نحفظ الـ ID في الـ context حتى نستخدمه بالخطوات الجاية
+    context.user_data['selected_agent_id'] = agent_id 
+    
+    # ***** هنا لازم تجيب اسم المجهز من القاعدة باستخدام الـ ID *****
+    # (حالياً راح نعتمد على الـ ID فقط لغرض التجربة، وراح نكتب دالة جلب الاسم بـ database.py قريباً)
+    agent_name = f"المجهز رقم {agent_id}" 
+
+    keyboard = [
+        [InlineKeyboardButton(f"إضافة محلات إلى {agent_name} 🏪", callback_data=f"assign_shops_{agent_id}")],
+        [InlineKeyboardButton(f"تعديل تفاصيل {agent_name} ✏️ (قريباً)", callback_data=f"edit_details_{agent_id}")],
+        [InlineKeyboardButton("🔙 العودة لقائمة المجهزين", callback_data="list_agents")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"**إختر الإجراء المطلوب للمجهز {agent_name}:**",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+    return MANAGE_AGENT
+
 
 async def add_new_agent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """تطلب بيانات المجهز الجديد."""
